@@ -29,6 +29,7 @@ func main() {
 			}
 			s.AddSolution(problem)
 		}
+		debug("free invokers:", s.freeInvokerCount)
 		for {
 			solution := nextInt()
 			test := nextInt()
@@ -38,8 +39,10 @@ func main() {
 			verdict := nextWord()
 			s.HandleResponse(solution, test, verdict)
 		}
+		debug("free invokers:", s.freeInvokerCount)
 		for _, r := range s.ScheduleGrading() {
-			fmt.Fprintln(out, r.solutionId, r.testId)
+			debug("scheduling test", r.test, "for solution", r.solution.id)
+			fmt.Fprintln(out, r.solution.id, r.test)
 		}
 		fmt.Fprintln(out, -1, -1)
 		out.Flush()
@@ -47,19 +50,24 @@ func main() {
 }
 
 type Scheduler struct {
-	invokerCount int
-	problems     []*Problem
-	solutions    []*Solution
+	invokerCount     int
+	freeInvokerCount int
+	problems         []*Problem
+	solutions        []*Solution
 }
 
 type Problem struct {
+	id          int
 	memoryLimit int
 	testCount   int
 }
 
 type Solution struct {
-	problemId int
-	verdicts  []Verdict
+	id       int
+	problem  *Problem
+	verdicts []Verdict
+	isDone   bool
+	nextTest int
 }
 
 type Verdict int
@@ -71,21 +79,24 @@ const (
 )
 
 type GradingRequest struct {
-	solutionId int
-	testId     int
+	solution *Solution
+	test     int
 }
 
 func NewScheduler(invokerCount int) *Scheduler {
 	return &Scheduler{
-		invokerCount: invokerCount,
+		invokerCount:     invokerCount,
+		freeInvokerCount: invokerCount,
 	}
 }
 
 func (s *Scheduler) AddProblem(memoryLimit, testCount int) {
-	debug("problem", len(s.problems),
+	problemId := len(s.problems)
+	debug("problem", problemId,
 		"has", testCount, "tests",
 		"and ML", memoryLimit, "ms")
-	s.problems = append(s.problems, &Problem{memoryLimit, testCount})
+	p := &Problem{problemId, memoryLimit, testCount}
+	s.problems = append(s.problems, p)
 }
 
 func (s *Scheduler) AddSolution(problemId int) {
@@ -93,19 +104,60 @@ func (s *Scheduler) AddSolution(problemId int) {
 	debug("new solution", solutionId, "for problem", problemId)
 	p := s.problems[problemId]
 	solution := &Solution{
-		problemId,
-		make([]Verdict, p.testCount),
+		id:       solutionId,
+		problem:  p,
+		verdicts: make([]Verdict, p.testCount),
 	}
 	s.solutions = append(s.solutions, solution)
 }
 
-func (s *Scheduler) HandleResponse(solution, test int, verdict string) {
-	debug("verdict for", solution, "test", test, "is", verdict)
+func (s *Scheduler) HandleResponse(solutionId, test int, verdict string) {
+	debug("verdict for", solutionId, "test", test, "is", verdict)
+	s.freeInvokerCount++
+	solution := s.solutions[solutionId]
+	if verdict == "OK" {
+		solution.SetVerdict(test, ACCEPTED)
+	} else {
+		solution.SetVerdict(test, REJECTED)
+	}
 }
 
 func (s *Scheduler) ScheduleGrading() []GradingRequest {
 	requests := make([]GradingRequest, 0)
+	for s.freeInvokerCount > 0 {
+		solution := s.findWaitingSolution()
+		if solution == nil {
+			break
+		}
+		requests = append(requests, solution.RequestForNextTest())
+		s.freeInvokerCount--
+	}
 	return requests
+}
+
+func (s *Scheduler) findWaitingSolution() *Solution {
+	for _, solution := range s.solutions {
+		if !solution.isDone {
+			return solution
+		}
+	}
+	return nil
+}
+
+func (solution *Solution) RequestForNextTest() GradingRequest {
+	request := GradingRequest{solution, solution.nextTest}
+	solution.nextTest++
+	if solution.nextTest == solution.problem.testCount {
+		solution.isDone = true
+	}
+	return request
+}
+
+func (solution *Solution) SetVerdict(test int, verdict Verdict) {
+	solution.verdicts[test] = verdict
+	if verdict == REJECTED {
+		solution.isDone = true
+	}
 }
 
 var (

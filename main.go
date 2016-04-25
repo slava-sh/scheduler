@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"container/list"
 	"fmt"
 	"io"
 	"os"
@@ -54,6 +55,7 @@ type Scheduler struct {
 	freeInvokerCount int
 	problems         []*Problem
 	solutions        []*Solution
+	pendingSolutions *list.List
 }
 
 type Problem struct {
@@ -87,6 +89,7 @@ func NewScheduler(invokerCount int) *Scheduler {
 	return &Scheduler{
 		invokerCount:     invokerCount,
 		freeInvokerCount: invokerCount,
+		pendingSolutions: list.New(),
 	}
 }
 
@@ -109,6 +112,7 @@ func (s *Scheduler) AddSolution(problemId int) {
 		verdicts: make([]Verdict, p.testCount),
 	}
 	s.solutions = append(s.solutions, solution)
+	s.pendingSolutions.PushBack(solution)
 }
 
 func (s *Scheduler) HandleResponse(solutionId, test int, verdict string) {
@@ -125,7 +129,7 @@ func (s *Scheduler) HandleResponse(solutionId, test int, verdict string) {
 func (s *Scheduler) ScheduleGrading() []GradingRequest {
 	requests := make([]GradingRequest, 0)
 	for s.freeInvokerCount > 0 {
-		solution := s.findWaitingSolution()
+		solution := s.findPendingSolution()
 		if solution == nil {
 			break
 		}
@@ -135,11 +139,15 @@ func (s *Scheduler) ScheduleGrading() []GradingRequest {
 	return requests
 }
 
-func (s *Scheduler) findWaitingSolution() *Solution {
-	for _, solution := range s.solutions {
+func (s *Scheduler) findPendingSolution() *Solution {
+	for e := s.pendingSolutions.Front(); e != nil; {
+		solution := e.Value.(*Solution)
 		if !solution.isDone {
 			return solution
 		}
+		next := e.Next()
+		s.pendingSolutions.Remove(e)
+		e = next
 	}
 	return nil
 }

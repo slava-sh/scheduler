@@ -22,8 +22,7 @@ func main() {
 		testCount := in.NextInt()
 		s.AddProblem(timeLimit, testCount)
 	}
-	for tick := 0; in.HasMore(); tick++ {
-		debug("tick", tick)
+	for ; in.HasMore(); s.NextTick() {
 		for {
 			problem := in.NextInt()
 			if problem == -1 {
@@ -42,8 +41,10 @@ func main() {
 			s.HandleResponse(solution, test, verdict)
 		}
 		debug("free invokers:", s.freeInvokerCount)
-		for _, r := range s.ScheduleGrading() {
-			debug("scheduling test", r.test, "for solution", r.solution.id)
+		for _, r := range s.ScheduleInvokations() {
+			debug("scheduling test", r.test,
+				"for solution", r.solution.id,
+				"priority", r.solution.Priority())
 			fmt.Fprintln(out, r.solution.id, r.test)
 		}
 		fmt.Fprintln(out, -1, -1)
@@ -67,6 +68,8 @@ type Scheduler struct {
 	problems         []*Problem
 	solutions        []*Solution
 	pendingSolutions *PriorityQueue
+	time             int
+	startTime        map[Invokation]int
 }
 
 type Problem struct {
@@ -76,11 +79,13 @@ type Problem struct {
 }
 
 type Solution struct {
-	id       int
-	problem  *Problem
-	verdicts []Verdict
-	isDone   bool
-	nextTest int
+	id          int
+	problem     *Problem
+	verdicts    []Verdict
+	isDone      bool
+	nextTest    int
+	testsRun    int
+	runningTime int
 }
 
 type Verdict int
@@ -91,7 +96,7 @@ const (
 	REJECTED
 )
 
-type GradingRequest struct {
+type Invokation struct {
 	solution *Solution
 	test     int
 }
@@ -101,7 +106,13 @@ func NewScheduler(invokerCount int) *Scheduler {
 		invokerCount:     invokerCount,
 		freeInvokerCount: invokerCount,
 		pendingSolutions: NewPriorityQueue(),
+		startTime:        make(map[Invokation]int),
 	}
+}
+
+func (s *Scheduler) NextTick() {
+	s.time += 10
+	debug("time is", s.time)
 }
 
 func (s *Scheduler) AddProblem(timeLimit, testCount int) {
@@ -130,15 +141,16 @@ func (s *Scheduler) HandleResponse(solutionId, test int, verdict string) {
 	debug("verdict for", solutionId, "test", test, "is", verdict)
 	s.freeInvokerCount++
 	solution := s.solutions[solutionId]
+	time := s.time - s.startTime[Invokation{solution, test}]
 	if verdict == "OK" {
-		solution.SetVerdict(test, ACCEPTED)
+		solution.SetVerdict(test, ACCEPTED, time)
 	} else {
-		solution.SetVerdict(test, REJECTED)
+		solution.SetVerdict(test, REJECTED, time)
 	}
 }
 
-func (s *Scheduler) ScheduleGrading() []GradingRequest {
-	requests := make([]GradingRequest, 0)
+func (s *Scheduler) ScheduleInvokations() []Invokation {
+	requests := make([]Invokation, 0)
 	for s.freeInvokerCount > 0 {
 		solution := s.findPendingSolution()
 		if solution == nil {
@@ -160,8 +172,8 @@ func (s *Scheduler) findPendingSolution() *Solution {
 	return nil
 }
 
-func (solution *Solution) RequestForNextTest() GradingRequest {
-	request := GradingRequest{solution, solution.nextTest}
+func (solution *Solution) RequestForNextTest() Invokation {
+	request := Invokation{solution, solution.nextTest}
 	solution.nextTest++
 	if solution.nextTest == solution.problem.testCount {
 		solution.isDone = true
@@ -169,16 +181,21 @@ func (solution *Solution) RequestForNextTest() GradingRequest {
 	return request
 }
 
-func (solution *Solution) SetVerdict(test int, verdict Verdict) {
+func (solution *Solution) SetVerdict(test int, verdict Verdict, time int) {
 	solution.verdicts[test] = verdict
+	solution.testsRun++
+	solution.runningTime += time
 	if verdict == REJECTED {
 		solution.isDone = true
 	}
 }
 
-func (solution *Solution) Priority() int {
+func (solution *Solution) Priority() float64 {
 	p := solution.problem
-	return p.testCount * p.timeLimit
+	if solution.testsRun == 0 {
+		return float64(p.testCount * p.timeLimit)
+	}
+	return float64(solution.runningTime*p.testCount) / float64(solution.testsRun)
 }
 
 //func (pq *PriorityQueue) update(item *QueueItem) {
@@ -186,7 +203,7 @@ func (solution *Solution) Priority() int {
 //}
 
 type PriorityQueueItem interface {
-	Priority() int
+	Priority() float64
 }
 
 type PriorityQueue struct {

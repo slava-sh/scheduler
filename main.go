@@ -86,7 +86,6 @@ type Solution struct {
 	nextTest    int
 	testsRun    int
 	runningTime int
-	queue       *PriorityQueue
 	heapIndex   int
 }
 
@@ -143,9 +142,9 @@ func (s *Scheduler) HandleResponse(solutionId, test int, verdict string) {
 	solution := s.solutions[solutionId]
 	time := s.time - s.startTime[Invokation{solution, test}]
 	if verdict == "OK" {
-		solution.SetVerdict(test, ACCEPTED, time)
+		s.setVerdict(solution, test, ACCEPTED, time)
 	} else {
-		solution.SetVerdict(test, REJECTED, time)
+		s.setVerdict(solution, test, REJECTED, time)
 	}
 	s.freeInvokerCount++
 	debug("verdict for", solution, "test", test, "is", verdict, "took", time, "ms")
@@ -155,39 +154,39 @@ func (s *Scheduler) ScheduleInvokations() []Invokation {
 	invokations := make([]Invokation, 0)
 	for s.freeInvokerCount > 0 && s.pendingSolutions.Len() > 0 {
 		solution := s.pendingSolutions.Top()
-		invokations = append(invokations, solution.NextInvokation())
+		invokations = append(invokations, s.NextInvokation(solution))
 		s.freeInvokerCount--
 	}
 	return invokations
 }
 
-func (solution *Solution) NextInvokation() Invokation {
+func (s *Scheduler) NextInvokation(solution *Solution) Invokation {
 	invokation := Invokation{solution, solution.nextTest}
 	solution.nextTest++
 	if solution.nextTest == solution.problem.testCount {
 		debug(solution, "is done (all tests)")
-		solution.SetDone()
+		s.setDone(solution)
 	}
 	return invokation
 }
 
-func (solution *Solution) SetVerdict(test int, verdict Verdict, time int) {
+func (s *Scheduler) setVerdict(solution *Solution, test int, verdict Verdict, time int) {
 	solution.verdicts[test] = verdict
 	solution.testsRun++
 	solution.runningTime += time
 	if verdict == REJECTED {
 		debug(solution, "is done (rejected)")
-		solution.SetDone()
+		s.setDone(solution)
 	}
 	if solution.heapIndex != -1 {
-		solution.queue.Update(solution.heapIndex)
+		s.pendingSolutions.Update(solution.heapIndex)
 	}
 }
 
-func (solution *Solution) SetDone() {
+func (s *Scheduler) setDone(solution *Solution) {
 	solution.isDone = true
 	if solution.heapIndex != -1 {
-		solution.queue.Remove(solution.heapIndex)
+		s.pendingSolutions.Remove(solution.heapIndex)
 	}
 }
 
@@ -214,7 +213,6 @@ func NewPriorityQueue() *PriorityQueue {
 }
 
 func (pq *PriorityQueue) Push(item *Solution) {
-	item.queue = pq
 	heap.Push(&pq.heap, item)
 }
 

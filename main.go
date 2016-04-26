@@ -164,10 +164,11 @@ func (s *Scheduler) ScheduleInvokations() []Invokation {
 
 func (s *Scheduler) findPendingSolution() *Solution {
 	for s.pendingSolutions.Len() != 0 {
-		solution := s.pendingSolutions.Pop().(*Solution)
+		solution := s.pendingSolutions.Top().(*Solution)
 		if !solution.isDone {
 			return solution
 		}
+		s.pendingSolutions.Pop()
 	}
 	return nil
 }
@@ -222,6 +223,10 @@ func (pq *PriorityQueue) Push(item PriorityQueueItem) {
 
 func (pq *PriorityQueue) Pop() PriorityQueueItem {
 	return heap.Pop(&pq.heap).(PriorityQueueItem)
+}
+
+func (pq *PriorityQueue) Top() PriorityQueueItem {
+	return pq.heap[0]
 }
 
 func (pq *PriorityQueue) Len() int {

@@ -6,6 +6,8 @@ import (
 	"container/list"
 	"fmt"
 	"io"
+	"io/ioutil"
+	"log"
 	"os"
 	"strings"
 )
@@ -23,7 +25,7 @@ func main() {
 		s.AddProblem(memoryLimit, testCount)
 	}
 	for tick := 0; in.HasMore(); tick++ {
-		debug("tick", tick)
+		logger.Println("tick", tick)
 		for {
 			problem := in.NextInt()
 			if problem == -1 {
@@ -31,7 +33,7 @@ func main() {
 			}
 			s.AddSolution(problem)
 		}
-		debug("free invokers:", s.freeInvokerCount)
+		logger.Println("free invokers:", s.freeInvokerCount)
 		for {
 			solution := in.NextInt()
 			test := in.NextInt()
@@ -41,14 +43,26 @@ func main() {
 			verdict := in.NextWord()
 			s.HandleResponse(solution, test, verdict)
 		}
-		debug("free invokers:", s.freeInvokerCount)
+		logger.Println("free invokers:", s.freeInvokerCount)
 		for _, r := range s.ScheduleGrading() {
-			debug("scheduling test", r.test, "for solution", r.solution.id)
+			logger.Println("scheduling test", r.test, "for solution", r.solution.id)
 			fmt.Fprintln(out, r.solution.id, r.test)
 		}
 		fmt.Fprintln(out, -1, -1)
 		out.Flush()
 	}
+}
+
+var (
+	debug  string
+	logger = createLogger()
+)
+
+func createLogger() *log.Logger {
+	if len(debug) == 0 {
+		return log.New(ioutil.Discard, "", 0)
+	}
+	return log.New(os.Stderr, "", log.Lmicroseconds)
 }
 
 type Scheduler struct {
@@ -96,7 +110,7 @@ func NewScheduler(invokerCount int) *Scheduler {
 
 func (s *Scheduler) AddProblem(memoryLimit, testCount int) {
 	problemId := len(s.problems)
-	debug("problem", problemId,
+	logger.Println("problem", problemId,
 		"has", testCount, "tests",
 		"and ML", memoryLimit, "ms")
 	p := &Problem{problemId, memoryLimit, testCount}
@@ -105,7 +119,7 @@ func (s *Scheduler) AddProblem(memoryLimit, testCount int) {
 
 func (s *Scheduler) AddSolution(problemId int) {
 	solutionId := len(s.solutions)
-	debug("new solution", solutionId, "for problem", problemId)
+	logger.Println("new solution", solutionId, "for problem", problemId)
 	p := s.problems[problemId]
 	solution := &Solution{
 		id:       solutionId,
@@ -117,7 +131,7 @@ func (s *Scheduler) AddSolution(problemId int) {
 }
 
 func (s *Scheduler) HandleResponse(solutionId, test int, verdict string) {
-	debug("verdict for", solutionId, "test", test, "is", verdict)
+	logger.Println("verdict for", solutionId, "test", test, "is", verdict)
 	s.freeInvokerCount++
 	solution := s.solutions[solutionId]
 	if verdict == "OK" {
@@ -167,10 +181,6 @@ func (solution *Solution) SetVerdict(test int, verdict Verdict) {
 	if verdict == REJECTED {
 		solution.isDone = true
 	}
-}
-
-func debug(a ...interface{}) {
-	fmt.Fprintln(os.Stderr, a...)
 }
 
 type FastReader struct {

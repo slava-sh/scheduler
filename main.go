@@ -86,6 +86,7 @@ type Solution struct {
 	nextTest    int
 	testsRun    int
 	runningTime int
+	heapIndex   int
 }
 
 type Verdict int
@@ -145,6 +146,7 @@ func (s *Scheduler) HandleResponse(solutionId, test int, verdict string) {
 	} else {
 		solution.SetVerdict(test, REJECTED, time)
 	}
+	s.pendingSolutions.Update(solution)
 	s.freeInvokerCount++
 	debug("verdict for", solution, "test", test, "is", verdict, "took", time, "ms")
 }
@@ -164,7 +166,7 @@ func (s *Scheduler) ScheduleInvokations() []Invokation {
 
 func (s *Scheduler) findPendingSolution() *Solution {
 	for s.pendingSolutions.Len() != 0 {
-		solution := s.pendingSolutions.Top().(*Solution)
+		solution := s.pendingSolutions.Top()
 		if !solution.isDone {
 			return solution
 		}
@@ -205,14 +207,6 @@ func (solution *Solution) Priority() float64 {
 	return float64(solution.runningTime*p.testCount) / float64(solution.testsRun)
 }
 
-//func (pq *PriorityQueue) update(item *QueueItem) {
-//	heap.Fix(pq, item.index)
-//}
-
-type PriorityQueueItem interface {
-	Priority() float64
-}
-
 type PriorityQueue struct {
 	heap pqHeap
 }
@@ -223,15 +217,15 @@ func NewPriorityQueue() *PriorityQueue {
 	return pq
 }
 
-func (pq *PriorityQueue) Push(item PriorityQueueItem) {
+func (pq *PriorityQueue) Push(item *Solution) {
 	heap.Push(&pq.heap, item)
 }
 
-func (pq *PriorityQueue) Pop() PriorityQueueItem {
-	return heap.Pop(&pq.heap).(PriorityQueueItem)
+func (pq *PriorityQueue) Pop() *Solution {
+	return heap.Pop(&pq.heap).(*Solution)
 }
 
-func (pq *PriorityQueue) Top() PriorityQueueItem {
+func (pq *PriorityQueue) Top() *Solution {
 	return pq.heap[0]
 }
 
@@ -239,7 +233,11 @@ func (pq *PriorityQueue) Len() int {
 	return len(pq.heap)
 }
 
-type pqHeap []PriorityQueueItem
+func (pq *PriorityQueue) Update(item *Solution) {
+	heap.Fix(&pq.heap, item.heapIndex)
+}
+
+type pqHeap []*Solution
 
 func (h pqHeap) Less(i, j int) bool {
 	return h[i].Priority() < h[j].Priority()
@@ -247,20 +245,25 @@ func (h pqHeap) Less(i, j int) bool {
 
 func (h pqHeap) Swap(i, j int) {
 	h[i], h[j] = h[j], h[i]
+	h[i].heapIndex = i
+	h[j].heapIndex = j
 }
 
 func (h pqHeap) Len() int {
 	return len(h)
 }
 
-func (h *pqHeap) Push(item interface{}) {
-	*h = append(*h, item.(PriorityQueueItem))
+func (h *pqHeap) Push(x interface{}) {
+	item := x.(*Solution)
+	item.heapIndex = len(*h)
+	*h = append(*h, item)
 }
 
 func (h *pqHeap) Pop() interface{} {
 	old := *h
 	n := len(old)
 	item := old[n-1]
+	item.heapIndex = -1
 	*h = old[:n-1]
 	return item
 }

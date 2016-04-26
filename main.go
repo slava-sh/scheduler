@@ -2,29 +2,30 @@ package main
 
 import (
 	"bufio"
+	"bytes"
 	"container/list"
 	"fmt"
 	"io"
 	"os"
+	"strings"
 )
 
 func main() {
+	in := NewFastReader(os.Stdin)
+	out := bufio.NewWriter(os.Stdout)
 	defer out.Flush()
-	invokerCount := nextInt()
-	problemCount := nextInt()
+	invokerCount := in.NextInt()
+	problemCount := in.NextInt()
 	s := NewScheduler(invokerCount)
 	for i := 0; i < problemCount; i++ {
-		memoryLimit := nextInt()
-		testCount := nextInt()
+		memoryLimit := in.NextInt()
+		testCount := in.NextInt()
 		s.AddProblem(memoryLimit, testCount)
 	}
-	for tick := 0; ; tick++ {
+	for tick := 0; in.HasMore(); tick++ {
 		debug("tick", tick)
 		for {
-			problem, isEOF := nextIntOrEOF()
-			if isEOF {
-				return
-			}
+			problem := in.NextInt()
 			if problem == -1 {
 				break
 			}
@@ -32,12 +33,12 @@ func main() {
 		}
 		debug("free invokers:", s.freeInvokerCount)
 		for {
-			solution := nextInt()
-			test := nextInt()
+			solution := in.NextInt()
+			test := in.NextInt()
 			if solution == -1 && test == -1 {
 				break
 			}
-			verdict := nextWord()
+			verdict := in.NextWord()
 			s.HandleResponse(solution, test, verdict)
 		}
 		debug("free invokers:", s.freeInvokerCount)
@@ -168,28 +169,64 @@ func (solution *Solution) SetVerdict(test int, verdict Verdict) {
 	}
 }
 
-var (
-	in  = bufio.NewReader(os.Stdin)
-	out = bufio.NewWriter(os.Stdout)
-)
-
-func nextIntOrEOF() (int, bool) {
-	var x int
-	_, err := fmt.Fscan(in, &x)
-	return x, err == io.EOF
-}
-
-func nextInt() int {
-	x, _ := nextIntOrEOF()
-	return x
-}
-
-func nextWord() string {
-	var w string
-	fmt.Fscan(in, &w)
-	return w
-}
-
 func debug(a ...interface{}) {
 	fmt.Fprintln(os.Stderr, a...)
+}
+
+type FastReader struct {
+	r     *bufio.Reader
+	words []string
+}
+
+func NewFastReader(r io.Reader) *FastReader {
+	return &FastReader{
+		r: bufio.NewReader(r),
+	}
+}
+
+func (r *FastReader) advance() {
+	if len(r.words) != 0 {
+		return
+	}
+	var buf bytes.Buffer
+	for {
+		chunk, more, _ := r.r.ReadLine()
+		buf.Write(chunk)
+		if !more {
+			break
+		}
+	}
+	r.words = strings.FieldsFunc(buf.String(), func(c rune) bool {
+		return c == ' '
+	})
+}
+
+func (r *FastReader) HasMore() bool {
+	r.advance()
+	return len(r.words) != 0
+}
+
+func (r *FastReader) NextWord() string {
+	r.advance()
+	word := r.words[0]
+	r.words = r.words[1:]
+	return word
+}
+
+func (r *FastReader) NextInt() int {
+	return parseInt(r.NextWord())
+}
+
+func parseInt(word string) int {
+	sign := 1
+	if word[0] == '-' {
+		sign = -1
+		word = word[1:]
+	}
+	result := 0
+	for i := 0; i < len(word); i++ {
+		result = result*10 + int(word[i]) - '0'
+	}
+	result *= sign
+	return result
 }

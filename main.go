@@ -3,7 +3,7 @@ package main
 import (
 	"bufio"
 	"bytes"
-	"container/list"
+	"container/heap"
 	"fmt"
 	"io"
 	"os"
@@ -66,7 +66,7 @@ type Scheduler struct {
 	freeInvokerCount int
 	problems         []*Problem
 	solutions        []*Solution
-	pendingSolutions *list.List
+	pendingSolutions *PriorityQueue
 }
 
 type Problem struct {
@@ -100,7 +100,7 @@ func NewScheduler(invokerCount int) *Scheduler {
 	return &Scheduler{
 		invokerCount:     invokerCount,
 		freeInvokerCount: invokerCount,
-		pendingSolutions: list.New(),
+		pendingSolutions: NewPriorityQueue(),
 	}
 }
 
@@ -123,7 +123,7 @@ func (s *Scheduler) AddSolution(problemId int) {
 		verdicts: make([]Verdict, p.testCount),
 	}
 	s.solutions = append(s.solutions, solution)
-	s.pendingSolutions.PushBack(solution)
+	s.pendingSolutions.Push(solution)
 }
 
 func (s *Scheduler) HandleResponse(solutionId, test int, verdict string) {
@@ -151,14 +151,11 @@ func (s *Scheduler) ScheduleGrading() []GradingRequest {
 }
 
 func (s *Scheduler) findPendingSolution() *Solution {
-	for e := s.pendingSolutions.Front(); e != nil; {
-		solution := e.Value.(*Solution)
+	for s.pendingSolutions.Len() != 0 {
+		solution := s.pendingSolutions.Pop().(*Solution)
 		if !solution.isDone {
 			return solution
 		}
-		next := e.Next()
-		s.pendingSolutions.Remove(e)
-		e = next
 	}
 	return nil
 }
@@ -177,6 +174,67 @@ func (solution *Solution) SetVerdict(test int, verdict Verdict) {
 	if verdict == REJECTED {
 		solution.isDone = true
 	}
+}
+
+func (solution *Solution) Priority() int {
+	p := solution.problem
+	return p.testCount * p.timeLimit
+}
+
+//func (pq *PriorityQueue) update(item *QueueItem) {
+//	heap.Fix(pq, item.index)
+//}
+
+type PriorityQueueItem interface {
+	Priority() int
+}
+
+type PriorityQueue struct {
+	heap pqHeap
+}
+
+func NewPriorityQueue() *PriorityQueue {
+	pq := new(PriorityQueue)
+	heap.Init(&pq.heap)
+	return pq
+}
+
+func (pq *PriorityQueue) Push(item PriorityQueueItem) {
+	heap.Push(&pq.heap, item)
+}
+
+func (pq *PriorityQueue) Pop() PriorityQueueItem {
+	return heap.Pop(&pq.heap).(PriorityQueueItem)
+}
+
+func (pq *PriorityQueue) Len() int {
+	return len(pq.heap)
+}
+
+type pqHeap []PriorityQueueItem
+
+func (h pqHeap) Less(i, j int) bool {
+	return h[i].Priority() < h[j].Priority()
+}
+
+func (h pqHeap) Swap(i, j int) {
+	h[i], h[j] = h[j], h[i]
+}
+
+func (h pqHeap) Len() int {
+	return len(h)
+}
+
+func (h *pqHeap) Push(item interface{}) {
+	*h = append(*h, item.(PriorityQueueItem))
+}
+
+func (h *pqHeap) Pop() interface{} {
+	old := *h
+	n := len(old)
+	item := old[n-1]
+	*h = old[:n-1]
+	return item
 }
 
 type FastReader struct {

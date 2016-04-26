@@ -43,7 +43,7 @@ func main() {
 		debug("free invokers:", s.freeInvokerCount)
 		for _, r := range s.ScheduleInvokations() {
 			debug("scheduling test", r.test,
-				"for solution", r.solution.id,
+				"for", r.solution,
 				"priority", r.solution.Priority())
 			fmt.Fprintln(out, r.solution.id, r.test)
 		}
@@ -126,7 +126,6 @@ func (s *Scheduler) AddProblem(timeLimit, testCount int) {
 
 func (s *Scheduler) AddSolution(problemId int) {
 	solutionId := len(s.solutions)
-	debug("new solution", solutionId, "for problem", problemId)
 	p := s.problems[problemId]
 	solution := &Solution{
 		id:       solutionId,
@@ -135,11 +134,10 @@ func (s *Scheduler) AddSolution(problemId int) {
 	}
 	s.solutions = append(s.solutions, solution)
 	s.pendingSolutions.Push(solution)
+	debug("new", solution, "for problem", problemId)
 }
 
 func (s *Scheduler) HandleResponse(solutionId, test int, verdict string) {
-	debug("verdict for", solutionId, "test", test, "is", verdict)
-	s.freeInvokerCount++
 	solution := s.solutions[solutionId]
 	time := s.time - s.startTime[Invokation{solution, test}]
 	if verdict == "OK" {
@@ -147,19 +145,21 @@ func (s *Scheduler) HandleResponse(solutionId, test int, verdict string) {
 	} else {
 		solution.SetVerdict(test, REJECTED, time)
 	}
+	s.freeInvokerCount++
+	debug("verdict for", solution, "test", test, "is", verdict, "took", time, "ms")
 }
 
 func (s *Scheduler) ScheduleInvokations() []Invokation {
-	requests := make([]Invokation, 0)
+	invokations := make([]Invokation, 0)
 	for s.freeInvokerCount > 0 {
 		solution := s.findPendingSolution()
 		if solution == nil {
 			break
 		}
-		requests = append(requests, solution.RequestForNextTest())
+		invokations = append(invokations, solution.NextInvokation())
 		s.freeInvokerCount--
 	}
-	return requests
+	return invokations
 }
 
 func (s *Scheduler) findPendingSolution() *Solution {
@@ -173,13 +173,14 @@ func (s *Scheduler) findPendingSolution() *Solution {
 	return nil
 }
 
-func (solution *Solution) RequestForNextTest() Invokation {
-	request := Invokation{solution, solution.nextTest}
+func (solution *Solution) NextInvokation() Invokation {
+	invokation := Invokation{solution, solution.nextTest}
 	solution.nextTest++
 	if solution.nextTest == solution.problem.testCount {
+		debug(solution, "is done (all tests)")
 		solution.isDone = true
 	}
-	return request
+	return invokation
 }
 
 func (solution *Solution) SetVerdict(test int, verdict Verdict, time int) {
@@ -187,8 +188,13 @@ func (solution *Solution) SetVerdict(test int, verdict Verdict, time int) {
 	solution.testsRun++
 	solution.runningTime += time
 	if verdict == REJECTED {
+		debug(solution, "is done (rejected)")
 		solution.isDone = true
 	}
+}
+
+func (solution *Solution) String() string {
+	return fmt.Sprint("solution ", solution.id)
 }
 
 func (solution *Solution) Priority() float64 {

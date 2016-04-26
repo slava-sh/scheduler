@@ -3,7 +3,7 @@ package main
 import (
 	"bufio"
 	"bytes"
-	"container/heap"
+	"container/list"
 	"fmt"
 	"io"
 	"os"
@@ -42,9 +42,7 @@ func main() {
 		}
 		debug("free invokers:", s.freeInvokerCount)
 		for _, r := range s.ScheduleInvokations() {
-			debug("scheduling test", r.test,
-				"for", r.solution,
-				"priority", r.solution.Priority())
+			debug("scheduling test", r.test, "for", r.solution)
 			fmt.Fprintln(out, r.solution.id, r.test)
 		}
 		fmt.Fprintln(out, -1, -1)
@@ -67,7 +65,7 @@ type Scheduler struct {
 	freeInvokerCount int
 	problems         []*Problem
 	solutions        []*Solution
-	pendingSolutions *PriorityQueue
+	pendingSolutions *list.List
 	time             int
 	startTime        map[Invokation]int
 }
@@ -86,7 +84,7 @@ type Solution struct {
 	nextTest    int
 	testsRun    int
 	runningTime int
-	heapIndex   int
+	e           *list.Element
 }
 
 type Verdict int
@@ -106,7 +104,7 @@ func NewScheduler(invokerCount int) *Scheduler {
 	return &Scheduler{
 		invokerCount:     invokerCount,
 		freeInvokerCount: invokerCount,
-		pendingSolutions: NewPriorityQueue(),
+		pendingSolutions: list.New(),
 		startTime:        make(map[Invokation]int),
 	}
 }
@@ -134,7 +132,7 @@ func (s *Scheduler) AddSolution(problemId int) {
 		verdicts: make([]Verdict, p.testCount),
 	}
 	s.solutions = append(s.solutions, solution)
-	s.pendingSolutions.Push(solution)
+	solution.e = s.pendingSolutions.PushFront(solution)
 	debug("new", solution, "for problem", problemId)
 }
 
@@ -153,7 +151,9 @@ func (s *Scheduler) HandleResponse(solutionId, test int, verdict string) {
 func (s *Scheduler) ScheduleInvokations() []Invokation {
 	invokations := make([]Invokation, 0)
 	for s.freeInvokerCount > 0 && s.pendingSolutions.Len() > 0 {
-		solution := s.pendingSolutions.Top()
+		e := s.pendingSolutions.Front()
+		s.pendingSolutions.MoveToBack(e)
+		solution := e.Value.(*Solution)
 		invokations = append(invokations, s.NextInvokation(solution))
 		s.freeInvokerCount--
 	}
@@ -178,93 +178,18 @@ func (s *Scheduler) setVerdict(solution *Solution, test int, verdict Verdict, ti
 		debug(solution, "is done (rejected)")
 		s.setDone(solution)
 	}
-	if solution.heapIndex != -1 {
-		s.pendingSolutions.Update(solution.heapIndex)
-	}
 }
 
 func (s *Scheduler) setDone(solution *Solution) {
 	solution.isDone = true
-	if solution.heapIndex != -1 {
-		s.pendingSolutions.Remove(solution.heapIndex)
+	if solution.e != nil {
+		s.pendingSolutions.Remove(solution.e)
+		solution.e = nil
 	}
 }
 
 func (solution *Solution) String() string {
 	return fmt.Sprint("solution ", solution.id)
-}
-
-func (solution *Solution) Priority() float64 {
-	p := solution.problem
-	if solution.testsRun == 0 {
-		return float64(p.testCount * p.timeLimit)
-	}
-	return float64(solution.runningTime*p.testCount) / float64(solution.testsRun)
-}
-
-type PriorityQueue struct {
-	heap pqHeap
-}
-
-func NewPriorityQueue() *PriorityQueue {
-	pq := new(PriorityQueue)
-	heap.Init(&pq.heap)
-	return pq
-}
-
-func (pq *PriorityQueue) Push(item *Solution) {
-	heap.Push(&pq.heap, item)
-}
-
-func (pq *PriorityQueue) Pop() *Solution {
-	return heap.Pop(&pq.heap).(*Solution)
-}
-
-func (pq *PriorityQueue) Remove(index int) *Solution {
-	return heap.Remove(&pq.heap, index).(*Solution)
-}
-
-func (pq *PriorityQueue) Update(index int) {
-	heap.Fix(&pq.heap, index)
-}
-
-func (pq *PriorityQueue) Top() *Solution {
-	return pq.heap[0]
-}
-
-func (pq *PriorityQueue) Len() int {
-	return len(pq.heap)
-}
-
-type pqHeap []*Solution
-
-func (h pqHeap) Less(i, j int) bool {
-	return h[i].Priority() < h[j].Priority()
-}
-
-func (h pqHeap) Swap(i, j int) {
-	h[i], h[j] = h[j], h[i]
-	h[i].heapIndex = i
-	h[j].heapIndex = j
-}
-
-func (h pqHeap) Len() int {
-	return len(h)
-}
-
-func (h *pqHeap) Push(x interface{}) {
-	item := x.(*Solution)
-	item.heapIndex = len(*h)
-	*h = append(*h, item)
-}
-
-func (h *pqHeap) Pop() interface{} {
-	old := *h
-	n := len(old)
-	item := old[n-1]
-	item.heapIndex = -1
-	*h = old[:n-1]
-	return item
 }
 
 type FastReader struct {

@@ -132,7 +132,7 @@ func (s *Scheduler) AddSolution(problemId int) {
 		verdicts: make([]Verdict, p.testCount),
 	}
 	s.solutions = append(s.solutions, solution)
-	solution.e = s.pendingSolutions.PushFront(solution)
+	solution.e = s.pendingSolutions.PushBack(solution)
 	debug("new", solution, "for problem", problemId)
 }
 

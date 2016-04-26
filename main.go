@@ -86,6 +86,7 @@ type Solution struct {
 	nextTest    int
 	testsRun    int
 	runningTime int
+	queue       *PriorityQueue
 	heapIndex   int
 }
 
@@ -146,33 +147,18 @@ func (s *Scheduler) HandleResponse(solutionId, test int, verdict string) {
 	} else {
 		solution.SetVerdict(test, REJECTED, time)
 	}
-	s.pendingSolutions.Update(solution)
 	s.freeInvokerCount++
 	debug("verdict for", solution, "test", test, "is", verdict, "took", time, "ms")
 }
 
 func (s *Scheduler) ScheduleInvokations() []Invokation {
 	invokations := make([]Invokation, 0)
-	for s.freeInvokerCount > 0 {
-		solution := s.findPendingSolution()
-		if solution == nil {
-			break
-		}
+	for s.freeInvokerCount > 0 && s.pendingSolutions.Len() > 0 {
+		solution := s.pendingSolutions.Top()
 		invokations = append(invokations, solution.NextInvokation())
 		s.freeInvokerCount--
 	}
 	return invokations
-}
-
-func (s *Scheduler) findPendingSolution() *Solution {
-	for s.pendingSolutions.Len() != 0 {
-		solution := s.pendingSolutions.Top()
-		if !solution.isDone {
-			return solution
-		}
-		s.pendingSolutions.Pop()
-	}
-	return nil
 }
 
 func (solution *Solution) NextInvokation() Invokation {
@@ -180,7 +166,7 @@ func (solution *Solution) NextInvokation() Invokation {
 	solution.nextTest++
 	if solution.nextTest == solution.problem.testCount {
 		debug(solution, "is done (all tests)")
-		solution.isDone = true
+		solution.SetDone()
 	}
 	return invokation
 }
@@ -191,7 +177,17 @@ func (solution *Solution) SetVerdict(test int, verdict Verdict, time int) {
 	solution.runningTime += time
 	if verdict == REJECTED {
 		debug(solution, "is done (rejected)")
-		solution.isDone = true
+		solution.SetDone()
+	}
+	if solution.heapIndex != -1 {
+		solution.queue.Update(solution.heapIndex)
+	}
+}
+
+func (solution *Solution) SetDone() {
+	solution.isDone = true
+	if solution.heapIndex != -1 {
+		solution.queue.Remove(solution.heapIndex)
 	}
 }
 
@@ -218,11 +214,20 @@ func NewPriorityQueue() *PriorityQueue {
 }
 
 func (pq *PriorityQueue) Push(item *Solution) {
+	item.queue = pq
 	heap.Push(&pq.heap, item)
 }
 
 func (pq *PriorityQueue) Pop() *Solution {
 	return heap.Pop(&pq.heap).(*Solution)
+}
+
+func (pq *PriorityQueue) Remove(index int) *Solution {
+	return heap.Remove(&pq.heap, index).(*Solution)
+}
+
+func (pq *PriorityQueue) Update(index int) {
+	heap.Fix(&pq.heap, index)
 }
 
 func (pq *PriorityQueue) Top() *Solution {
@@ -231,10 +236,6 @@ func (pq *PriorityQueue) Top() *Solution {
 
 func (pq *PriorityQueue) Len() int {
 	return len(pq.heap)
-}
-
-func (pq *PriorityQueue) Update(item *Solution) {
-	heap.Fix(&pq.heap, item.heapIndex)
 }
 
 type pqHeap []*Solution

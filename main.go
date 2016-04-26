@@ -18,9 +18,9 @@ func main() {
 	problemCount := in.NextInt()
 	s := NewScheduler(invokerCount)
 	for i := 0; i < problemCount; i++ {
-		memoryLimit := in.NextInt()
+		timeLimit := in.NextInt()
 		testCount := in.NextInt()
-		s.AddProblem(memoryLimit, testCount)
+		s.AddProblem(timeLimit, testCount)
 	}
 	for tick := 0; in.HasMore(); tick++ {
 		debug("tick", tick)
@@ -70,9 +70,9 @@ type Scheduler struct {
 }
 
 type Problem struct {
-	id          int
-	memoryLimit int
-	testCount   int
+	id        int
+	timeLimit int
+	testCount int
 }
 
 type Solution struct {
@@ -104,12 +104,12 @@ func NewScheduler(invokerCount int) *Scheduler {
 	}
 }
 
-func (s *Scheduler) AddProblem(memoryLimit, testCount int) {
+func (s *Scheduler) AddProblem(timeLimit, testCount int) {
 	problemId := len(s.problems)
 	debug("problem", problemId,
 		"has", testCount, "tests",
-		"and ML", memoryLimit, "ms")
-	p := &Problem{problemId, memoryLimit, testCount}
+		"and ML", timeLimit, "ms")
+	p := &Problem{problemId, timeLimit, testCount}
 	s.problems = append(s.problems, p)
 }
 

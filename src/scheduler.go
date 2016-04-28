@@ -87,6 +87,7 @@ type Solution struct {
 	nextTest     int
 	testsRun     int
 	timeConsumed int
+	startTime    int
 }
 
 type Verdict int
@@ -129,9 +130,10 @@ func (s *Scheduler) AddSolution(problemId int) {
 	solutionId := len(s.solutions)
 	p := s.problems[problemId]
 	solution := &Solution{
-		id:       solutionId,
-		problem:  p,
-		verdicts: make([]Verdict, p.testCount),
+		id:        solutionId,
+		problem:   p,
+		verdicts:  make([]Verdict, p.testCount),
+		startTime: s.currentTime,
 	}
 	s.solutions = append(s.solutions, solution)
 	s.pendingSolutions.PushBack(solution)

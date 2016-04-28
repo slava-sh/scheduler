@@ -278,10 +278,13 @@ type Priority struct {
 }
 
 func (a Priority) Less(b Priority) bool {
+	if a.robin != b.robin {
+		return a.robin < b.robin
+	}
 	if a.time != b.time {
 		return a.time < b.time
 	}
-	return a.robin < b.robin
+	return false
 }
 
 func (solution *Solution) Priority() Priority {
@@ -292,8 +295,8 @@ func (solution *Solution) Priority() Priority {
 		time = solution.timeConsumed * solution.problem.testCount / solution.testsRun
 	}
 	return Priority{
-		time,
-		solution.robin,
+		time / 10,
+		solution.robin / 10,
 	}
 }
 

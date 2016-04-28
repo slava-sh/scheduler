@@ -10,6 +10,8 @@ import (
 	"strings"
 )
 
+const TIME_STEP = 10
+
 func main() {
 	in := NewFastReader(os.Stdin)
 	out := bufio.NewWriter(os.Stdout)
@@ -110,7 +112,7 @@ func NewScheduler(invokerCount int) *Scheduler {
 }
 
 func (s *Scheduler) NextTick() {
-	s.time += 10
+	s.time += TIME_STEP
 	debug("time is", s.time)
 }
 

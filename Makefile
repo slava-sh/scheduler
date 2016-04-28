@@ -1,11 +1,17 @@
 .PHONY: debug
 debug:
-	go run -ldflags '-X main.debugFlag=true' main.go
-
-.PHONY: run
-run:
-	go run main.go
+	go run -ldflags '-X main.debugFlag=true' scheduler.go
 
 .PHONY: clean
 clean:
-	rm main
+	rm scheduler interactor output.txt
+
+scheduler:
+	go build scheduler.go
+
+interactor:
+	clang++ -O2 sdk/interactor.cpp -o interactor
+
+crossrun: scheduler interactor
+	java -jar sdk/CrossRun.jar "./interactor tests/$(TEST) output.txt" "./scheduler"
+	@cat output.txt

@@ -170,6 +170,7 @@ func (s *Scheduler) ScheduleInvocations() []Invocation {
 
 func (s *Scheduler) NextInvocation(solution *Solution) Invocation {
 	invocation := Invocation{solution.id, solution.nextTest}
+	s.startTime[invocation] = s.currentTime
 	solution.nextTest++
 	if solution.nextTest == solution.problem.testCount {
 		debug(solution, "is done (all tests scheduled)")
@@ -185,6 +186,11 @@ func (s *Scheduler) setVerdict(solution *Solution, test int, verdict Verdict, ti
 	if verdict == REJECTED {
 		debug(solution, "is done (rejected)")
 		s.setDone(solution)
+	}
+	if verdict == REJECTED || test == solution.problem.testCount-1 {
+		debug(solution, "is done; time:",
+			s.currentTime-solution.startTime, "total,",
+			solution.timeConsumed, "consumed")
 	}
 }
 

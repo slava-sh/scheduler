@@ -3,7 +3,6 @@ package main
 import (
 	"bufio"
 	"fmt"
-	"io"
 	"io/ioutil"
 	"log"
 	"os"
@@ -11,18 +10,6 @@ import (
 	"strconv"
 	"sync"
 )
-
-type logWriter log.Logger
-
-func (w *logWriter) Write(b []byte) (int, error) {
-	(*log.Logger)(w).Print(string(b))
-	return len(b), nil
-}
-
-func spyWriter(w io.Writer, name string) io.Writer {
-	lw := (*logWriter)(log.New(os.Stdout, fmt.Sprint(name, ": "), log.LstdFlags))
-	return io.MultiWriter(w, lw)
-}
 
 func run(test int) int {
 	testFile := fmt.Sprintf("tests/%02d", test)
@@ -67,8 +54,8 @@ func run(test int) int {
 func main() {
 	const NUM_TESTS = 10
 	scores := make([]int, NUM_TESTS)
-	var wg sync.WaitGroup
 	fmt.Printf("Test\tScore\n")
+	var wg sync.WaitGroup
 	for i := range scores {
 		wg.Add(1)
 		go func(i int) {
@@ -83,5 +70,5 @@ func main() {
 	for _, score := range scores {
 		sum += score
 	}
-	fmt.Printf("Total\t%v\n", sum)
+	fmt.Printf("Score\t%v\n", sum)
 }

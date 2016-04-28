@@ -77,14 +77,14 @@ type Problem struct {
 }
 
 type Solution struct {
-	id          int
-	problem     *Problem
-	verdicts    []Verdict
-	isDone      bool
-	nextTest    int
-	testsRun    int
-	runningTime int
-	e           *list.Element
+	id           int
+	problem      *Problem
+	verdicts     []Verdict
+	isDone       bool
+	nextTest     int
+	testsRun     int
+	timeConsumed int
+	e            *list.Element
 }
 
 type Verdict int
@@ -173,7 +173,7 @@ func (s *Scheduler) NextInvokation(solution *Solution) Invokation {
 func (s *Scheduler) setVerdict(solution *Solution, test int, verdict Verdict, time int) {
 	solution.verdicts[test] = verdict
 	solution.testsRun++
-	solution.runningTime += time
+	solution.timeConsumed += time
 	if verdict == REJECTED {
 		debug(solution, "is done (rejected)")
 		s.setDone(solution)

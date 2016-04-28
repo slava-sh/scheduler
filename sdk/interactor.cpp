@@ -129,6 +129,7 @@ int main(int argc, char* argv[])
     		break;
     	int problemId = inf.readInt();
     	vector<Verdict> verdicts;
+        int firstRJ = -1;
     	while (true) {
     		int timeConsumed = inf.readInt();
     		if (timeConsumed == -1)
@@ -137,12 +138,18 @@ int main(int argc, char* argv[])
     		Verdict verdict;
     		verdict.timeConsumed = timeConsumed;
     		verdict.passed = verdictString == "OK";
+            if (!verdict.passed && firstRJ == -1) {
+                firstRJ = verdicts.size();
+            }
     		verdicts.push_back(verdict);
     	}
+        fprintf(stderr, "%d;%d;%.5f\n", firstRJ+1, verdicts.size(),
+                ((double)(firstRJ+1) / verdicts.size()));
     	if (!submissions.empty())
     	    assert(submissions.back().submitTime <= submitTime);
     	submissions.push_back(Submission(submitTime, problemId, verdicts));
     }
+    return 0;
 
    	finishedCount = 0; 
     int submissionIndex = 0;

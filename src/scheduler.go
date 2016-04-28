@@ -13,7 +13,7 @@ import (
 const TIME_STEP = 10
 
 func main() {
-	rand.Seed(987862)
+	rand.Seed(98862)
 	in := NewFastReader(os.Stdin)
 	out := bufio.NewWriter(os.Stdout)
 	defer out.Flush()
@@ -153,13 +153,13 @@ func (s *Scheduler) HandleResponse(solutionId, test int, verdict string) {
 func (s *Scheduler) ScheduleInvokations() []Invokation {
 	invokations := make([]Invokation, 0)
 	for s.freeInvokerCount > 0 && s.pendingSolutions.Len() > 0 {
-		e := s.pendingSolutions.Get(0)
-		s.pendingSolutions.Remove(0)
+		i := rand.Intn(s.pendingSolutions.Len())
+		e := s.pendingSolutions.Get(i)
 		solution := e.(*Solution)
 		if solution.isDone {
+			s.pendingSolutions.Remove(i)
 			continue
 		}
-		s.pendingSolutions.PushBack(e)
 		invokations = append(invokations, s.NextInvokation(solution))
 		s.freeInvokerCount--
 	}

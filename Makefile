@@ -11,7 +11,7 @@ bin/crossrun:
 	go build -o bin/crossrun src/crossrun.go
 
 bin/interactor:
-	clang++ -O2 -o bin/interactor sdk/interactor.cpp
+	clang++ -w -O2 -o bin/interactor sdk/interactor.cpp
 
 .PHONY: clean
 clean:

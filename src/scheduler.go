@@ -33,7 +33,6 @@ func main() {
 			}
 			s.AddSolution(problem)
 		}
-		debug("free invokers:", s.freeInvokerCount)
 		for {
 			solution := in.NextInt()
 			test := in.NextInt()
@@ -44,6 +43,7 @@ func main() {
 			s.HandleResponse(solution, test, verdict)
 		}
 		debug("free invokers:", s.freeInvokerCount)
+		debug("about", s.pendingSolutions.Len(), "solutions pending")
 		for _, r := range s.ScheduleInvocations() {
 			debug("scheduling test", r.test, "for", r.solutionId)
 			fmt.Fprintln(out, r.solutionId, r.test)

@@ -1,17 +1,18 @@
-.PHONY: debug
-debug:
-	go run -ldflags '-X main.debugFlag=true' scheduler.go
+.DEFAULT_GOAL := evaluate
+
+.PHONY: evaluate
+evaluate: bin/scheduler bin/interactor bin/crossrun
+	bin/crossrun
+
+bin/scheduler:
+	go build -o bin/scheduler src/scheduler.go
+
+bin/crossrun:
+	go build -o bin/crossrun src/crossrun.go
+
+bin/interactor:
+	clang++ -O2 -o bin/interactor sdk/interactor.cpp
 
 .PHONY: clean
 clean:
-	rm scheduler interactor output.txt
-
-scheduler:
-	go build scheduler.go
-
-interactor:
-	clang++ -O2 sdk/interactor.cpp -o interactor
-
-crossrun: scheduler interactor
-	java -jar sdk/CrossRun.jar "./interactor tests/$(TEST) output.txt" "./scheduler"
-	@cat output.txt
+	$(RM) -r bin

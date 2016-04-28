@@ -68,7 +68,7 @@ type Scheduler struct {
 	problems         []*Problem
 	solutions        []*Solution
 	pendingSolutions *list.List
-	time             int
+	currentTime      int
 	startTime        map[Invokation]int
 }
 
@@ -112,8 +112,8 @@ func NewScheduler(invokerCount int) *Scheduler {
 }
 
 func (s *Scheduler) NextTick() {
-	s.time += TIME_STEP
-	debug("time is", s.time)
+	s.currentTime += TIME_STEP
+	debug("time is", s.currentTime)
 }
 
 func (s *Scheduler) AddProblem(timeLimit, testCount int) {
@@ -140,7 +140,7 @@ func (s *Scheduler) AddSolution(problemId int) {
 
 func (s *Scheduler) HandleResponse(solutionId, test int, verdict string) {
 	solution := s.solutions[solutionId]
-	time := s.time - s.startTime[Invokation{solution, test}]
+	time := s.currentTime - s.startTime[Invokation{solution, test}]
 	if verdict == "OK" {
 		s.setVerdict(solution, test, ACCEPTED, time)
 	} else {

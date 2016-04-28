@@ -3,9 +3,9 @@ package main
 import (
 	"bufio"
 	"bytes"
-	"container/list"
 	"fmt"
 	"io"
+	"math/rand"
 	"os"
 	"strings"
 )
@@ -13,6 +13,7 @@ import (
 const TIME_STEP = 10
 
 func main() {
+	rand.Seed(987862)
 	in := NewFastReader(os.Stdin)
 	out := bufio.NewWriter(os.Stdout)
 	defer out.Flush()
@@ -67,7 +68,7 @@ type Scheduler struct {
 	freeInvokerCount int
 	problems         []*Problem
 	solutions        []*Solution
-	pendingSolutions *list.List
+	pendingSolutions *TreapArray
 	currentTime      int
 	startTime        map[Invokation]int
 }
@@ -86,7 +87,6 @@ type Solution struct {
 	nextTest     int
 	testsRun     int
 	timeConsumed int
-	e            *list.Element
 }
 
 type Verdict int
@@ -106,7 +106,7 @@ func NewScheduler(invokerCount int) *Scheduler {
 	return &Scheduler{
 		invokerCount:     invokerCount,
 		freeInvokerCount: invokerCount,
-		pendingSolutions: list.New(),
+		pendingSolutions: NewTreapArray(),
 		startTime:        make(map[Invokation]int),
 	}
 }
@@ -134,7 +134,7 @@ func (s *Scheduler) AddSolution(problemId int) {
 		verdicts: make([]Verdict, p.testCount),
 	}
 	s.solutions = append(s.solutions, solution)
-	solution.e = s.pendingSolutions.PushBack(solution)
+	s.pendingSolutions.PushBack(solution)
 	debug("new", solution, "for problem", problemId)
 }
 
@@ -153,9 +153,13 @@ func (s *Scheduler) HandleResponse(solutionId, test int, verdict string) {
 func (s *Scheduler) ScheduleInvokations() []Invokation {
 	invokations := make([]Invokation, 0)
 	for s.freeInvokerCount > 0 && s.pendingSolutions.Len() > 0 {
-		e := s.pendingSolutions.Front()
-		s.pendingSolutions.MoveToBack(e)
-		solution := e.Value.(*Solution)
+		e := s.pendingSolutions.Get(0)
+		s.pendingSolutions.Remove(0)
+		solution := e.(*Solution)
+		if solution.isDone {
+			continue
+		}
+		s.pendingSolutions.PushBack(e)
 		invokations = append(invokations, s.NextInvokation(solution))
 		s.freeInvokerCount--
 	}
@@ -184,10 +188,6 @@ func (s *Scheduler) setVerdict(solution *Solution, test int, verdict Verdict, ti
 
 func (s *Scheduler) setDone(solution *Solution) {
 	solution.isDone = true
-	if solution.e != nil {
-		s.pendingSolutions.Remove(solution.e)
-		solution.e = nil
-	}
 }
 
 func (solution *Solution) String() string {
@@ -250,4 +250,115 @@ func parseInt(word string) int {
 	}
 	result *= sign
 	return result
+}
+
+type TreapArray struct {
+	root *Node
+}
+
+type Node struct {
+	value    interface{}
+	size     int
+	priority int
+	left     *Node
+	right    *Node
+}
+
+func NewNode(value interface{}) *Node {
+	return &Node{
+		value:    value,
+		size:     1,
+		priority: rand.Int(),
+	}
+}
+
+func NewTreapArray() *TreapArray {
+	return new(TreapArray)
+}
+
+func (t *TreapArray) Len() int {
+	if t.root == nil {
+		return 0
+	}
+	return t.root.size
+}
+
+func (t *TreapArray) PushBack(value interface{}) {
+	t.root = merge2(t.root, NewNode(value))
+}
+
+func (t *TreapArray) Get(index int) interface{} {
+	left, middle, right := split3(t.root, index, index)
+	if middle == nil {
+		panic("TreapArray: index error")
+	}
+	result := middle.value
+	t.root = merge3(left, middle, right)
+	return result
+}
+
+func (t *TreapArray) Remove(index int) {
+	left, _, right := split3(t.root, index, index)
+	t.root = merge2(left, right)
+}
+
+func split3(node *Node, a, b int) (left, middle, right *Node) {
+	middle, right = split2(node, b)
+	left, middle = split2(middle, a-1)
+	return
+}
+
+func merge3(left, middle, right *Node) *Node {
+	return merge2(merge2(left, middle), right)
+}
+
+func merge2(left, right *Node) *Node {
+	if left == nil {
+		return right
+	}
+	if right == nil {
+		return left
+	}
+	var result *Node
+	if left.priority > right.priority {
+		result = left
+		result.right = merge2(result.right, right)
+	} else {
+		result = right
+		result.left = merge2(left, result.left)
+	}
+	update(result)
+	return result
+}
+
+func split2(node *Node, index int) (left, right *Node) {
+	if node == nil {
+		return
+	}
+	nodeIndex := 0
+	if node.left != nil {
+		nodeIndex += node.left.size
+	}
+	if nodeIndex <= index {
+		node.right, right = split2(node.right, index-nodeIndex-1)
+		left = node
+	} else {
+		left, node.left = split2(node.left, index)
+		right = node
+	}
+	update(node)
+	return
+}
+
+func update(node *Node) {
+	if node == nil {
+		return
+	}
+	node.size = 1
+	if node.left != nil {
+		node.size += node.left.size
+	}
+	if node.right != nil {
+		node.size += node.right.size
+	}
 }

@@ -273,15 +273,26 @@ func parseInt(word string) int {
 }
 
 type Priority struct {
+	time  int
 	robin int
 }
 
 func (a Priority) Less(b Priority) bool {
+	if a.time != b.time {
+		return a.time < b.time
+	}
 	return a.robin < b.robin
 }
 
 func (solution *Solution) Priority() Priority {
+	var time int
+	if solution.testsRun == 0 {
+		time = solution.problem.timeLimit * solution.problem.testCount
+	} else {
+		time = solution.timeConsumed * solution.problem.testCount / solution.testsRun
+	}
 	return Priority{
+		time,
 		solution.robin,
 	}
 }

@@ -70,6 +70,7 @@ type Scheduler struct {
 	pendingSolutions *PriorityQueue
 	currentTime      int
 	startTime        map[Invocation]int
+	robinGenereator  int
 }
 
 type Problem struct {
@@ -88,6 +89,7 @@ type Solution struct {
 	timeConsumed int
 	startTime    int
 	heapIndex    int
+	robin        int
 }
 
 type Verdict int
@@ -134,6 +136,7 @@ func (s *Scheduler) AddSolution(problemId int) {
 		problem:   p,
 		verdicts:  make([]Verdict, p.testCount),
 		startTime: s.currentTime,
+		robin:     s.nextRobin(),
 	}
 	s.solutions = append(s.solutions, solution)
 	s.pendingSolutions.Push(solution)
@@ -165,10 +168,14 @@ func (s *Scheduler) ScheduleInvocations() []Invocation {
 func (s *Scheduler) NextInvocation(solution *Solution) Invocation {
 	invocation := Invocation{solution.id, solution.nextTest}
 	s.startTime[invocation] = s.currentTime
+	solution.robin = s.nextRobin()
 	solution.nextTest++
 	if solution.nextTest == solution.problem.testCount {
 		debug(solution, "is done (all tests scheduled)")
 		s.setDone(solution)
+	}
+	if solution.heapIndex != -1 {
+		s.pendingSolutions.Update(solution.heapIndex)
 	}
 	return invocation
 }
@@ -196,6 +203,11 @@ func (s *Scheduler) setDone(solution *Solution) {
 	if solution.heapIndex != -1 {
 		s.pendingSolutions.Remove(solution.heapIndex)
 	}
+}
+
+func (s *Scheduler) nextRobin() int {
+	s.robinGenereator++
+	return s.robinGenereator
 }
 
 func (solution *Solution) String() string {
@@ -260,8 +272,18 @@ func parseInt(word string) int {
 	return result
 }
 
-func (solution *Solution) Priority() int {
-	return 1
+type Priority struct {
+	robin int
+}
+
+func (a Priority) Less(b Priority) bool {
+	return a.robin < b.robin
+}
+
+func (solution *Solution) Priority() Priority {
+	return Priority{
+		solution.robin,
+	}
 }
 
 type PriorityQueue struct {
@@ -301,7 +323,7 @@ func (pq *PriorityQueue) Len() int {
 type pqHeap []*Solution
 
 func (h pqHeap) Less(i, j int) bool {
-	return h[i].Priority() < h[j].Priority()
+	return h[i].Priority().Less(h[j].Priority())
 }
 
 func (h pqHeap) Swap(i, j int) {

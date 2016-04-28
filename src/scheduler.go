@@ -44,9 +44,9 @@ func main() {
 			s.HandleResponse(solution, test, verdict)
 		}
 		debug("free invokers:", s.freeInvokerCount)
-		for _, r := range s.ScheduleInvokations() {
-			debug("scheduling test", r.test, "for", r.solution)
-			fmt.Fprintln(out, r.solution.id, r.test)
+		for _, r := range s.ScheduleInvocations() {
+			debug("scheduling test", r.test, "for", r.solutionId)
+			fmt.Fprintln(out, r.solutionId, r.test)
 		}
 		fmt.Fprintln(out, -1, -1)
 		out.Flush()
@@ -70,7 +70,7 @@ type Scheduler struct {
 	solutions        []*Solution
 	pendingSolutions *TreapArray
 	currentTime      int
-	startTime        map[Invokation]int
+	startTime        map[Invocation]int
 }
 
 type Problem struct {
@@ -98,9 +98,9 @@ const (
 	REJECTED
 )
 
-type Invokation struct {
-	solution *Solution
-	test     int
+type Invocation struct {
+	solutionId int
+	test       int
 }
 
 func NewScheduler(invokerCount int) *Scheduler {
@@ -108,7 +108,7 @@ func NewScheduler(invokerCount int) *Scheduler {
 		invokerCount:     invokerCount,
 		freeInvokerCount: invokerCount,
 		pendingSolutions: NewTreapArray(),
-		startTime:        make(map[Invokation]int),
+		startTime:        make(map[Invocation]int),
 	}
 }
 
@@ -142,7 +142,7 @@ func (s *Scheduler) AddSolution(problemId int) {
 
 func (s *Scheduler) HandleResponse(solutionId, test int, verdict string) {
 	solution := s.solutions[solutionId]
-	time := s.currentTime - s.startTime[Invokation{solution, test}]
+	time := s.currentTime - s.startTime[Invocation{solutionId, test}]
 	if verdict == "OK" {
 		s.setVerdict(solution, test, ACCEPTED, time)
 	} else {
@@ -152,8 +152,8 @@ func (s *Scheduler) HandleResponse(solutionId, test int, verdict string) {
 	debug("verdict for", solution, "test", test, "is", verdict, "took", time, "ms")
 }
 
-func (s *Scheduler) ScheduleInvokations() []Invokation {
-	invokations := make([]Invokation, 0)
+func (s *Scheduler) ScheduleInvocations() []Invocation {
+	invocations := make([]Invocation, 0)
 	for s.freeInvokerCount > 0 && s.pendingSolutions.Len() > 0 {
 		i := rand.Intn(s.pendingSolutions.Len())
 		e := s.pendingSolutions.Get(i)
@@ -162,20 +162,20 @@ func (s *Scheduler) ScheduleInvokations() []Invokation {
 			s.pendingSolutions.Remove(i)
 			continue
 		}
-		invokations = append(invokations, s.NextInvokation(solution))
+		invocations = append(invocations, s.NextInvocation(solution))
 		s.freeInvokerCount--
 	}
-	return invokations
+	return invocations
 }
 
-func (s *Scheduler) NextInvokation(solution *Solution) Invokation {
-	invokation := Invokation{solution, solution.nextTest}
+func (s *Scheduler) NextInvocation(solution *Solution) Invocation {
+	invocation := Invocation{solution.id, solution.nextTest}
 	solution.nextTest++
 	if solution.nextTest == solution.problem.testCount {
-		debug(solution, "is done (all tests)")
+		debug(solution, "is done (all tests scheduled)")
 		s.setDone(solution)
 	}
-	return invokation
+	return invocation
 }
 
 func (s *Scheduler) setVerdict(solution *Solution, test int, verdict Verdict, time int) {

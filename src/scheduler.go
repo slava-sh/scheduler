@@ -6,6 +6,7 @@ import (
 	"container/list"
 	"fmt"
 	"io"
+	"math"
 	"os"
 	"strings"
 )
@@ -156,12 +157,46 @@ func (s *Scheduler) ScheduleInvocations() []Invocation {
 	invocations := make([]Invocation, 0)
 	for s.freeInvokerCount > 0 && s.pendingSolutions.Len() > 0 {
 		e := s.pendingSolutions.Front()
-		s.pendingSolutions.MoveToBack(e)
+		if s.pendingSolutions.Len() > 100 {
+			s.pendingSolutions.MoveToBack(e)
+		} else {
+			bestScore := math.MaxInt32
+			for u := s.pendingSolutions.Front(); u != nil; u = u.Next() {
+				us := u.Value.(*Solution)
+				score := 0
+				for v := s.pendingSolutions.Front(); v != nil; v = v.Next() {
+					vs := v.Value.(*Solution)
+					score += pow3(s.estimatedTime(vs) + s.estimatedInvokerTime(us))
+				}
+				if score < bestScore {
+					e = u
+					bestScore = score
+				}
+			}
+		}
 		solution := e.Value.(*Solution)
 		invocations = append(invocations, s.NextInvocation(solution))
 		s.freeInvokerCount--
 	}
 	return invocations
+}
+
+func (s *Scheduler) estimatedInvokerTime(solution *Solution) int {
+	var invokerTime int
+	if solution.testsRun == 0 {
+		invokerTime = solution.problem.timeLimit * solution.problem.testCount
+	} else {
+		invokerTime = solution.timeConsumed * solution.problem.testCount / solution.testsRun
+	}
+	return invokerTime
+}
+
+func (s *Scheduler) estimatedTime(solution *Solution) int {
+	return s.currentTime - solution.startTime + s.estimatedInvokerTime(solution)
+}
+
+func pow3(x int) int {
+	return x * x * x
 }
 
 func (s *Scheduler) NextInvocation(solution *Solution) Invocation {

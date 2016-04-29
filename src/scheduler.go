@@ -41,8 +41,6 @@ func main() {
 			verdict := in.NextWord()
 			sc.HandleResponse(s, test, verdict)
 		}
-		debug("free invokers:", sc.freeInvokerCount)
-		debug("about", sc.schedule.Len(), "invocations pending")
 		for _, r := range sc.ScheduleInvocations() {
 			debug("scheduling test", r.test, "for", r.solutionId)
 			fmt.Fprintln(out, r.solutionId, r.test)
@@ -104,7 +102,6 @@ func NewScheduler(invokerCount int) *Scheduler {
 
 func (sc *Scheduler) NextTick() {
 	sc.currentTime += TIME_STEP
-	debug("time is", sc.currentTime)
 }
 
 func (sc *Scheduler) AddProblem(timeLimit, testCount int) {
@@ -136,7 +133,6 @@ func (sc *Scheduler) HandleResponse(solutionId, test int, verdict string) {
 	time := sc.currentTime - sc.startTime[Invocation{solutionId, test}]
 	sc.setVerdict(s, test, verdict != "OK", time)
 	sc.freeInvokerCount++
-	debug("verdict for", s, "test", test, "is", verdict, "took", time, "ms")
 }
 
 func (sc *Scheduler) ScheduleInvocations() []Invocation {

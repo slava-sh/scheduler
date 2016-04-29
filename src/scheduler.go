@@ -27,7 +27,7 @@ func (a Priority) Less(b Priority) bool {
 
 func (solution *Solution) Priority() Priority {
 	var p Priority
-	p.progress = solution.testsRun * 100 / solution.problem.testCount / 20
+	p.progress = solution.testsRun * 100 / solution.problem.testCount / 40
 	p.robin = solution.robin
 	return p
 }

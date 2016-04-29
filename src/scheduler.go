@@ -14,9 +14,9 @@ import (
 )
 
 const (
-	SEED              = 24535
+	SEED              = 24536
 	GA_POPULATION     = 10
-	GA_MUTATION_SWAPS = 10
+	GA_MUTATION_SWAPS = 5
 	UPDATE_TIME       = 1 * time.Millisecond
 )
 

@@ -285,16 +285,14 @@ func (a Priority) Less(b Priority) bool {
 }
 
 func (solution *Solution) Priority() Priority {
-	var time int
-	if solution.testsRun == 0 {
-		time = solution.problem.timeLimit * solution.problem.testCount
-	} else {
-		time = solution.timeConsumed * solution.problem.testCount / solution.testsRun
+	p := Priority{}
+	p.time = solution.problem.timeLimit * solution.problem.testCount
+	if solution.testsRun > 0 {
+		p.time = solution.timeConsumed * solution.problem.testCount / solution.testsRun
 	}
-	return Priority{
-		time,
-		solution.robin,
-	}
+	p.time /= 10
+	p.robin = solution.robin
+	return p
 }
 
 type PriorityQueue struct {

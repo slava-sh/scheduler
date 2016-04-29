@@ -275,12 +275,12 @@ func cross(a, b Schedule) Schedule {
 	used := make(map[*Solution]bool)
 	for len(a) != 0 && len(b) != 0 {
 		var s *Solution
-		if len(a) == 0 && rand.Intn(1) == 0 {
-			s = b[0]
-			b = b[1:]
-		} else {
+		if len(a) != 0 && rand.Intn(2) == 0 {
 			s = a[0]
 			a = a[1:]
+		} else {
+			s = b[0]
+			b = b[1:]
 		}
 		if !used[s] {
 			used[s] = true

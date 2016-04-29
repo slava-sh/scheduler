@@ -28,7 +28,7 @@ func run(test int) int {
 	if err != nil {
 		log.Panic(err)
 	}
-	//interactor.Stderr = os.Stderr
+	interactor.Stderr = os.Stderr
 	scheduler.Stderr = os.Stderr
 	interactor.Start()
 	scheduler.Start()

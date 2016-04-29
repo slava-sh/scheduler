@@ -9,12 +9,15 @@ import (
 	"os"
 	"sort"
 	"strings"
+	"sync"
+	"time"
 )
 
 const (
 	SEED          = 24536
 	GA_POPULATION = 10
 	GA_MUTATIONS  = 5
+	UPDATE_TIME   = 10 * time.Millisecond
 )
 
 const TIME_STEP = 10
@@ -32,6 +35,12 @@ func main() {
 		testCount := in.NextInt()
 		sc.AddProblem(timeLimit, testCount)
 	}
+	go func() {
+		for {
+			sc.updateSchedules()
+			time.Sleep(UPDATE_TIME)
+		}
+	}()
 	for ; in.HasMore(); sc.NextTick() {
 		for {
 			problem := in.NextInt()
@@ -73,6 +82,7 @@ type Scheduler struct {
 	problems         []*Problem
 	solutions        []*Solution
 	schedules        []Schedule
+	schedulesMutex   *sync.Mutex
 	currentTime      int
 	invocationTime   map[Invocation]int
 }
@@ -106,16 +116,13 @@ func NewScheduler(invokerCount int) *Scheduler {
 		invokerCount:     invokerCount,
 		freeInvokerCount: invokerCount,
 		schedules:        make([]Schedule, GA_POPULATION),
+		schedulesMutex:   new(sync.Mutex),
 		invocationTime:   make(map[Invocation]int),
 	}
 }
 
 func (sc *Scheduler) NextTick() {
 	sc.currentTime += TIME_STEP
-	n := len(sc.schedule())
-	if n != 0 && (sc.currentTime)%(TIME_STEP*n) == 0 {
-		sc.updateSchedules()
-	}
 }
 
 func (sc *Scheduler) AddProblem(timeLimit, testCount int) {
@@ -134,9 +141,11 @@ func (sc *Scheduler) AddSolution(problemId int) {
 		startTime: sc.currentTime,
 	}
 	sc.solutions = append(sc.solutions, s)
+	sc.schedulesMutex.Lock()
 	for i := range sc.schedules {
 		sc.schedules[i] = append(sc.schedules[i], s)
 	}
+	sc.schedulesMutex.Unlock()
 }
 
 func (sc *Scheduler) HandleResponse(solutionId, test int, verdict string) {
@@ -212,6 +221,7 @@ func (sc *Scheduler) scheduleScore(schedule Schedule) float64 {
 }
 
 func (sc *Scheduler) updateSchedules() {
+	sc.schedulesMutex.Lock()
 	newSchedules := make([]Schedule, 0)
 	for _, schedule := range sc.schedules {
 		schedule = clean(schedule)
@@ -227,9 +237,7 @@ func (sc *Scheduler) updateSchedules() {
 	}
 	sort.Sort(scheduleSorter{sc.schedules, scores})
 	sc.schedules = sc.schedules[:GA_POPULATION]
-	if len(sc.schedule()) > 10 {
-		debug(sc.schedule()[:10], scores[0])
-	}
+	sc.schedulesMutex.Unlock()
 }
 
 func clean(schedule Schedule) Schedule {

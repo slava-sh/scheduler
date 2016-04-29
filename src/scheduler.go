@@ -113,7 +113,7 @@ func NewScheduler(invokerCount int) *Scheduler {
 func (sc *Scheduler) NextTick() {
 	sc.currentTime += TIME_STEP
 	n := len(sc.schedule())
-	if n != 0 && (sc.currentTime)%(TIME_STEP*2*n) == 0 {
+	if n != 0 && (sc.currentTime)%(TIME_STEP*n) == 0 {
 		sc.updateSchedules()
 	}
 }
@@ -167,11 +167,10 @@ func (sc *Scheduler) ScheduleInvocations() []Invocation {
 		if sc.freeInvokerCount == 0 {
 			break
 		}
-		if s.isDone {
-			continue
+		for !s.isDone && sc.freeInvokerCount != 0 {
+			invocations = append(invocations, sc.nextInvocation(s))
+			sc.freeInvokerCount--
 		}
-		invocations = append(invocations, sc.nextInvocation(s))
-		sc.freeInvokerCount--
 	}
 	return invocations
 }

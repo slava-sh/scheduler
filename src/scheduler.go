@@ -25,10 +25,10 @@ func (a Priority) Less(b Priority) bool {
 	return false
 }
 
-func (solution *Solution) Priority() Priority {
+func (s *Solution) Priority() Priority {
 	var p Priority
-	p.progress = solution.testsRun * 100 / solution.problem.testCount / 40
-	p.robin = solution.robin
+	p.progress = s.testsRun * 100 / s.problem.testCount / 34
+	p.robin = s.robin
 	return p
 }
 
@@ -40,32 +40,32 @@ func main() {
 	defer out.Flush()
 	invokerCount := in.NextInt()
 	problemCount := in.NextInt()
-	s := NewScheduler(invokerCount)
+	sc := NewScheduler(invokerCount)
 	for i := 0; i < problemCount; i++ {
 		timeLimit := in.NextInt()
 		testCount := in.NextInt()
-		s.AddProblem(timeLimit, testCount)
+		sc.AddProblem(timeLimit, testCount)
 	}
-	for ; in.HasMore(); s.NextTick() {
+	for ; in.HasMore(); sc.NextTick() {
 		for {
 			problem := in.NextInt()
 			if problem == -1 {
 				break
 			}
-			s.AddSolution(problem)
+			sc.AddSolution(problem)
 		}
 		for {
-			solution := in.NextInt()
+			s := in.NextInt()
 			test := in.NextInt()
-			if solution == -1 && test == -1 {
+			if s == -1 && test == -1 {
 				break
 			}
 			verdict := in.NextWord()
-			s.HandleResponse(solution, test, verdict)
+			sc.HandleResponse(s, test, verdict)
 		}
-		debug("free invokers:", s.freeInvokerCount)
-		debug("about", s.pendingSolutions.Len(), "solutions pending")
-		for _, r := range s.ScheduleInvocations() {
+		debug("free invokers:", sc.freeInvokerCount)
+		debug("about", sc.pendingSolutions.Len(), "solutions pending")
+		for _, r := range sc.ScheduleInvocations() {
 			debug("scheduling test", r.test, "for", r.solutionId)
 			fmt.Fprintln(out, r.solutionId, r.test)
 		}
@@ -136,104 +136,104 @@ func NewScheduler(invokerCount int) *Scheduler {
 	}
 }
 
-func (s *Scheduler) NextTick() {
-	s.currentTime += TIME_STEP
-	debug("time is", s.currentTime)
+func (sc *Scheduler) NextTick() {
+	sc.currentTime += TIME_STEP
+	debug("time is", sc.currentTime)
 }
 
-func (s *Scheduler) AddProblem(timeLimit, testCount int) {
-	problemId := len(s.problems)
+func (sc *Scheduler) AddProblem(timeLimit, testCount int) {
+	problemId := len(sc.problems)
 	debug("problem", problemId,
 		"has", testCount, "tests",
 		"and ML", timeLimit, "ms")
 	p := &Problem{problemId, timeLimit, testCount}
-	s.problems = append(s.problems, p)
+	sc.problems = append(sc.problems, p)
 }
 
-func (s *Scheduler) AddSolution(problemId int) {
-	solutionId := len(s.solutions)
-	p := s.problems[problemId]
-	solution := &Solution{
+func (sc *Scheduler) AddSolution(problemId int) {
+	solutionId := len(sc.solutions)
+	p := sc.problems[problemId]
+	s := &Solution{
 		id:        solutionId,
 		problem:   p,
 		verdicts:  make([]Verdict, p.testCount),
-		startTime: s.currentTime,
-		robin:     s.nextRobin(),
+		startTime: sc.currentTime,
+		robin:     sc.nextRobin(),
 	}
-	s.solutions = append(s.solutions, solution)
-	s.pendingSolutions.Push(solution)
-	debug("new", solution, "for problem", problemId)
+	sc.solutions = append(sc.solutions, s)
+	sc.pendingSolutions.Push(s)
+	debug("new", s, "for problem", problemId)
 }
 
-func (s *Scheduler) HandleResponse(solutionId, test int, verdict string) {
-	solution := s.solutions[solutionId]
-	time := s.currentTime - s.startTime[Invocation{solutionId, test}]
+func (sc *Scheduler) HandleResponse(solutionId, test int, verdict string) {
+	s := sc.solutions[solutionId]
+	time := sc.currentTime - sc.startTime[Invocation{solutionId, test}]
 	if verdict == "OK" {
-		s.setVerdict(solution, test, ACCEPTED, time)
+		sc.setVerdict(s, test, ACCEPTED, time)
 	} else {
-		s.setVerdict(solution, test, REJECTED, time)
+		sc.setVerdict(s, test, REJECTED, time)
 	}
-	s.freeInvokerCount++
-	debug("verdict for", solution, "test", test, "is", verdict, "took", time, "ms")
+	sc.freeInvokerCount++
+	debug("verdict for", s, "test", test, "is", verdict, "took", time, "ms")
 }
 
-func (s *Scheduler) ScheduleInvocations() []Invocation {
+func (sc *Scheduler) ScheduleInvocations() []Invocation {
 	invocations := make([]Invocation, 0)
-	for s.freeInvokerCount > 0 && s.pendingSolutions.Len() > 0 {
-		solution := s.pendingSolutions.Top()
-		invocations = append(invocations, s.NextInvocation(solution))
-		s.freeInvokerCount--
+	for sc.freeInvokerCount > 0 && sc.pendingSolutions.Len() > 0 {
+		s := sc.pendingSolutions.Top()
+		invocations = append(invocations, sc.NextInvocation(s))
+		sc.freeInvokerCount--
 	}
 	return invocations
 }
 
-func (s *Scheduler) NextInvocation(solution *Solution) Invocation {
-	invocation := Invocation{solution.id, solution.nextTest}
-	s.startTime[invocation] = s.currentTime
-	solution.robin = s.nextRobin()
-	solution.nextTest++
-	if solution.nextTest == solution.problem.testCount {
-		debug(solution, "is done (all tests scheduled)")
-		s.setDone(solution)
+func (sc *Scheduler) NextInvocation(s *Solution) Invocation {
+	invocation := Invocation{s.id, s.nextTest}
+	sc.startTime[invocation] = sc.currentTime
+	s.robin = sc.nextRobin()
+	s.nextTest++
+	if s.nextTest == s.problem.testCount {
+		debug(s, "is done (all tests scheduled)")
+		sc.setDone(s)
 	}
-	if solution.heapIndex != -1 {
-		s.pendingSolutions.Update(solution.heapIndex)
+	if s.heapIndex != -1 {
+		sc.pendingSolutions.Update(s.heapIndex)
 	}
 	return invocation
 }
 
-func (s *Scheduler) setVerdict(solution *Solution, test int, verdict Verdict, time int) {
-	solution.verdicts[test] = verdict
-	solution.testsRun++
-	solution.timeConsumed += time
+func (sc *Scheduler) setVerdict(s *Solution, test int, verdict Verdict, time int) {
+	s.verdicts[test] = verdict
+	s.testsRun++
+	s.timeConsumed += time
 	if verdict == REJECTED {
-		debug(solution, "is done (rejected)")
-		s.setDone(solution)
+		debug(s, "is done (rejected)")
+		sc.setDone(s)
 	}
-	if verdict == REJECTED || test == solution.problem.testCount-1 {
-		debug(solution, "is done; time:",
-			s.currentTime-solution.startTime, "total,",
-			solution.timeConsumed, "consumed")
+	if verdict == REJECTED || test == s.problem.testCount-1 {
+		debug(s, "is done; time:",
+			sc.currentTime-s.startTime, "total,",
+			s.timeConsumed, "consumed")
 	}
-	if solution.heapIndex != -1 {
-		s.pendingSolutions.Update(solution.heapIndex)
-	}
-}
-
-func (s *Scheduler) setDone(solution *Solution) {
-	solution.isDone = true
-	if solution.heapIndex != -1 {
-		s.pendingSolutions.Remove(solution.heapIndex)
+	if s.heapIndex != -1 {
+		sc.pendingSolutions.Update(s.heapIndex)
 	}
 }
 
-func (s *Scheduler) nextRobin() int {
-	s.robinGenereator++
-	return s.robinGenereator
+func (sc *Scheduler) setDone(s *Solution) {
+	s.isDone = true
+	if s.heapIndex != -1 {
+		sc.pendingSolutions.Remove(s.heapIndex)
+	}
 }
 
-func (solution *Solution) String() string {
-	return fmt.Sprint("solution ", solution.id)
+func (sc *Scheduler) nextRobin() int {
+	sc.robinGenereator++
+	return sc.robinGenereator
+}
+
+func (s *Solution) String() string {
+	return fmt.Sprint("s ", s.id)
 }
 
 type FastReader struct {

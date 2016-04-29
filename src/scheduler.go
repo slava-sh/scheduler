@@ -14,9 +14,9 @@ import (
 )
 
 const (
-	SEED              = 24536
+	SEED              = 24535
 	GA_POPULATION     = 10
-	GA_MUTATION_SWAPS = 5
+	GA_MUTATION_SWAPS = 10
 	UPDATE_TIME       = 1 * time.Millisecond
 )
 
@@ -35,15 +35,17 @@ func main() {
 		testCount := in.NextInt()
 		sc.AddProblem(timeLimit, testCount)
 	}
-	updateCount := 0
+	updates := 0
 	go func() {
 		for {
 			sc.UpdateSchedules()
-			updateCount++
+			updates++
 			time.Sleep(UPDATE_TIME)
 		}
 	}()
+	ticks := 0
 	for ; in.HasMore(); sc.NextTick() {
+		ticks++
 		for {
 			problem := in.NextInt()
 			if problem == -1 {
@@ -66,7 +68,7 @@ func main() {
 		fmt.Fprintln(out, -1, -1)
 		out.Flush()
 	}
-	fmt.Fprintln(os.Stderr, updateCount, "updates")
+	fmt.Fprintln(os.Stderr, updates, "updates in", ticks, "ticks")
 }
 
 var debugFlag string

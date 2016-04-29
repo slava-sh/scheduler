@@ -14,10 +14,11 @@ import (
 )
 
 const (
-	SEED          = 24536
-	GA_POPULATION = 10
-	GA_MUTATIONS  = 5
-	UPDATE_TIME   = 10 * time.Millisecond
+	SEED              = 24536
+	GA_POPULATION     = 30
+	GA_MUTATIONS      = 5
+	GA_MUTATION_SWAPS = 5
+	UPDATE_TIME       = 5 * time.Millisecond
 )
 
 const TIME_STEP = 10
@@ -37,7 +38,7 @@ func main() {
 	}
 	go func() {
 		for {
-			sc.updateSchedules()
+			sc.UpdateSchedules()
 			time.Sleep(UPDATE_TIME)
 		}
 	}()
@@ -220,14 +221,16 @@ func (sc *Scheduler) scheduleScore(schedule Schedule) float64 {
 	return score
 }
 
-func (sc *Scheduler) updateSchedules() {
+func (sc *Scheduler) UpdateSchedules() {
 	sc.schedulesMutex.Lock()
 	newSchedules := make([]Schedule, 0)
 	for _, schedule := range sc.schedules {
 		schedule = clean(schedule)
 		newSchedules = append(newSchedules, schedule)
 		if len(schedule) != 0 {
-			newSchedules = append(newSchedules, mutate(schedule))
+			for i := 0; i < GA_MUTATIONS; i++ {
+				newSchedules = append(newSchedules, mutate(schedule))
+			}
 		}
 	}
 	sc.schedules = newSchedules
@@ -252,30 +255,10 @@ func clean(schedule Schedule) Schedule {
 
 func mutate(schedule Schedule) Schedule {
 	result := append(Schedule{}, schedule...)
-	for mutation := 0; mutation < GA_MUTATIONS; mutation++ {
+	for mutation := 0; mutation < GA_MUTATION_SWAPS; mutation++ {
 		i := rand.Intn(len(schedule))
 		j := rand.Intn(len(schedule))
 		result[i], result[j] = result[j], result[i]
-	}
-	return result
-}
-
-func cross(a, b Schedule) Schedule {
-	result := make(Schedule, 0)
-	used := make(map[*Solution]bool)
-	for len(a) != 0 && len(b) != 0 {
-		var s *Solution
-		if len(a) == 0 && rand.Intn(1) == 0 {
-			s = b[0]
-			b = b[1:]
-		} else {
-			s = a[0]
-			a = a[1:]
-		}
-		if !used[s] {
-			used[s] = true
-			result = append(result, s)
-		}
 	}
 	return result
 }

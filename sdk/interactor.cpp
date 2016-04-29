@@ -106,7 +106,7 @@ int main(int argc, char* argv[])
     	invokerFreeTime.push_back(0);
     }
     
-    printf("%d\n", invokerCount);
+    //printf("%d\n", invokerCount);
     
     problems.resize(problemCount);
     for (int i = 0; i < problemCount; i++) {
@@ -116,19 +116,23 @@ int main(int argc, char* argv[])
     	problems[i] = Problem(timeLimit, testCount);
     }
     
-    printf("%d\n", problemCount);
+    //printf("%d\n", problemCount);
     for (int i = 0; i < problemCount; i++) {
-    	printf("%d %d\n", problems[i].timeLimit, problems[i].testCount);
+    //	printf("%d %d\n", problems[i].timeLimit, problems[i].testCount);
     }
-    fflush(stdout);
+    //fflush(stdout);
     
     submissions.clear();
+    printf("SubmitTime,Problem,InvokerTime,Invocations,TestCount\n");
     while (true) {
     	int submitTime = inf.readInt();
+        int invokerTime = 0;
+        int invocations = 0;
     	if (submitTime == -1)
     		break;
     	int problemId = inf.readInt();
     	vector<Verdict> verdicts;
+        bool isRJ = false;
     	while (true) {
     		int timeConsumed = inf.readInt();
     		if (timeConsumed == -1)
@@ -138,11 +142,20 @@ int main(int argc, char* argv[])
     		verdict.timeConsumed = timeConsumed;
     		verdict.passed = verdictString == "OK";
     		verdicts.push_back(verdict);
+            if (!isRJ) {
+                invokerTime += timeConsumed;
+                invocations++;
+            }
+            if (!verdict.passed) {
+                isRJ = true;
+            }
     	}
     	if (!submissions.empty())
     	    assert(submissions.back().submitTime <= submitTime);
     	submissions.push_back(Submission(submitTime, problemId, verdicts));
+        printf("%d,%d,%d,%d,%d\n", submitTime, problemId, invokerTime, invocations, verdicts.size());
     }
+    return 0;
 
    	finishedCount = 0; 
     int submissionIndex = 0;

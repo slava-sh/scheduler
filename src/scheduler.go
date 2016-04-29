@@ -12,16 +12,16 @@ import (
 	"strings"
 )
 
-const TIME_STEP = 10
-
 const (
-	NUM_SCHEDULES = 30
-	NUM_MUTATIONS = 5
-	//NUM_ALPHAS    = 3
+	SEED          = 24536
+	GA_POPULATION = 10
+	GA_MUTATIONS  = 5
 )
 
+const TIME_STEP = 10
+
 func main() {
-	rand.Seed(24536)
+	rand.Seed(SEED)
 	in := NewFastReader(os.Stdin)
 	out := bufio.NewWriter(os.Stdout)
 	defer out.Flush()
@@ -51,7 +51,6 @@ func main() {
 			sc.HandleResponse(s, test, verdict)
 		}
 		for _, r := range sc.ScheduleInvocations() {
-			//debug("scheduling test", r.test, "for", r.solutionId)
 			fmt.Fprintln(out, r.solutionId, r.test)
 		}
 		fmt.Fprintln(out, -1, -1)
@@ -76,7 +75,7 @@ type Scheduler struct {
 	solutions        []*Solution
 	schedules        []Schedule
 	currentTime      int
-	startTime        map[Invocation]int
+	invocationTime   map[Invocation]int
 }
 
 type Schedule []*Solution
@@ -107,73 +106,151 @@ func NewScheduler(invokerCount int) *Scheduler {
 	return &Scheduler{
 		invokerCount:     invokerCount,
 		freeInvokerCount: invokerCount,
-		schedules:        make([]Schedule, NUM_SCHEDULES),
-		startTime:        make(map[Invocation]int),
+		schedules:        make([]Schedule, GA_POPULATION),
+		invocationTime:   make(map[Invocation]int),
 	}
 }
 
 func (sc *Scheduler) NextTick() {
 	sc.currentTime += TIME_STEP
-	n := len(sc.schedules[0])
-	if n != 0 && (sc.currentTime)%(n*TIME_STEP) == 0 {
-		newSchedules := make([]Schedule, 0)
-		for _, schedule := range sc.schedules {
-			schedule = clean(schedule)
-			newSchedules = append(newSchedules, schedule)
-			if len(schedule) != 0 {
-				newSchedules = append(newSchedules, mutate(schedule))
-			}
-		}
-		//for i := 0; i < len(sc.schedules) && i < NUM_ALPHAS; i++ {
-		//	for j := i + 1; j < len(sc.schedules) && j < NUM_ALPHAS; j++ {
-		//		newSchedules = append(newSchedules, cross(sc.schedules[i], sc.schedules[j]))
-		//	}
-		//}
-		sc.schedules = newSchedules
-		scores := make([]*big.Int, 0)
-		for _, schedule := range sc.schedules {
-			scores = append(scores, sc.evaluateSchedule(schedule))
-		}
-		//best := append(Schedule{}, sc.schedules[0]...)
-		//bestScore := scores[0]
-		sort.Sort(scheduleSorter{sc.schedules, scores})
-		sc.schedules = sc.schedules[:NUM_SCHEDULES]
-		//if len(sc.schedules[0]) > 10 && !same(sc.schedules[0], best) {
-		//	debug(sc.schedules[0][:10], scores[0], bestScore)
-		//}
+	n := len(sc.schedule())
+	if n != 0 && (sc.currentTime)%(TIME_STEP*2*n) == 0 {
+		sc.updateSchedules()
 	}
 }
 
-func same(a, b Schedule) bool {
-	if len(a) != len(b) {
-		return false
+func (sc *Scheduler) AddProblem(timeLimit, testCount int) {
+	problemId := len(sc.problems)
+	debug("problem", problemId, "has", testCount, "tests and ML", timeLimit, "ms")
+	p := &Problem{problemId, timeLimit, testCount}
+	sc.problems = append(sc.problems, p)
+}
+
+func (sc *Scheduler) AddSolution(problemId int) {
+	solutionId := len(sc.solutions)
+	p := sc.problems[problemId]
+	s := &Solution{
+		id:        solutionId,
+		problem:   p,
+		startTime: sc.currentTime,
 	}
-	for i := range a {
-		if a[i] != b[i] {
-			return false
+	sc.solutions = append(sc.solutions, s)
+	for i := range sc.schedules {
+		sc.schedules[i] = append(sc.schedules[i], s)
+	}
+}
+
+func (sc *Scheduler) HandleResponse(solutionId, test int, verdict string) {
+	time := sc.currentTime - sc.invocationTime[Invocation{solutionId, test}]
+	s := sc.solutions[solutionId]
+	s.runningTests--
+	s.testsRun++
+	s.timeConsumed += time
+	if verdict != "OK" {
+		s.isDone = true
+	}
+	sc.freeInvokerCount++
+}
+
+func (sc *Scheduler) ScheduleInvocations() []Invocation {
+	invocations := make([]Invocation, 0)
+	for _, s := range sc.schedule() {
+		if sc.freeInvokerCount == 0 {
+			break
+		}
+		if s.isDone || s.runningTests != 0 {
+			continue
+		}
+		invocations = append(invocations, sc.nextInvocation(s))
+		sc.freeInvokerCount--
+	}
+	for _, s := range sc.schedule() {
+		if sc.freeInvokerCount == 0 {
+			break
+		}
+		if s.isDone {
+			continue
+		}
+		invocations = append(invocations, sc.nextInvocation(s))
+		sc.freeInvokerCount--
+	}
+	return invocations
+}
+
+func (sc *Scheduler) nextInvocation(s *Solution) Invocation {
+	s.runningTests++
+	invocation := Invocation{s.id, s.nextTest}
+	sc.invocationTime[invocation] = sc.currentTime
+	s.nextTest++
+	if s.nextTest == s.problem.testCount {
+		s.isDone = true
+	}
+	return invocation
+}
+
+func (sc *Scheduler) schedule() Schedule {
+	return sc.schedules[0]
+}
+
+func (sc *Scheduler) evaluateSchedule(schedule Schedule) *big.Int {
+	score := big.NewInt(0)
+	t := sc.currentTime
+	for _, s := range schedule {
+		if s.isDone {
+			continue
+		}
+		testingTime := 0
+		if s.testsRun == 0 {
+			testingTime = s.problem.timeLimit * (s.problem.testCount - s.testsRun)
+		} else {
+			testingTime = s.timeConsumed * (s.problem.testCount - s.testsRun) / s.testsRun
+		}
+		t += testingTime
+		sTime := big.NewInt(int64(t-s.startTime) / TIME_STEP)
+		sTime3 := big.NewInt(0)
+		sTime3.Mul(sTime, sTime)
+		sTime3.Mul(sTime3, sTime)
+		score.Add(score, sTime3)
+	}
+	return score
+}
+
+func (sc *Scheduler) updateSchedules() {
+	newSchedules := make([]Schedule, 0)
+	for _, schedule := range sc.schedules {
+		schedule = clean(schedule)
+		newSchedules = append(newSchedules, schedule)
+		if len(schedule) != 0 {
+			newSchedules = append(newSchedules, mutate(schedule))
 		}
 	}
-	return true
+	sc.schedules = newSchedules
+	scores := make([]*big.Int, 0)
+	for _, schedule := range sc.schedules {
+		scores = append(scores, sc.evaluateSchedule(schedule))
+	}
+	sort.Sort(scheduleSorter{sc.schedules, scores})
+	sc.schedules = sc.schedules[:GA_POPULATION]
 }
 
 func clean(schedule Schedule) Schedule {
-	newSchedule := make(Schedule, 0)
+	result := make(Schedule, 0)
 	for _, s := range schedule {
 		if !s.isDone {
-			newSchedule = append(newSchedule, s)
+			result = append(result, s)
 		}
 	}
-	return newSchedule
+	return result
 }
 
 func mutate(schedule Schedule) Schedule {
-	newSchedule := append(Schedule{}, schedule...)
-	for mutation := 0; mutation < NUM_MUTATIONS; mutation++ {
+	result := append(Schedule{}, schedule...)
+	for mutation := 0; mutation < GA_MUTATIONS; mutation++ {
 		i := rand.Intn(len(schedule))
 		j := rand.Intn(len(schedule))
-		newSchedule[i], newSchedule[j] = newSchedule[j], newSchedule[i]
+		result[i], result[j] = result[j], result[i]
 	}
-	return newSchedule
+	return result
 }
 
 func cross(a, b Schedule) Schedule {
@@ -212,111 +289,6 @@ func (s scheduleSorter) Swap(i, j int) {
 
 func (s scheduleSorter) Less(i, j int) bool {
 	return s.scores[i].Cmp(s.scores[j]) < 0
-}
-
-func (sc *Scheduler) AddProblem(timeLimit, testCount int) {
-	problemId := len(sc.problems)
-	debug("problem", problemId,
-		"has", testCount, "tests",
-		"and ML", timeLimit, "ms")
-	p := &Problem{problemId, timeLimit, testCount}
-	sc.problems = append(sc.problems, p)
-}
-
-func (sc *Scheduler) AddSolution(problemId int) {
-	solutionId := len(sc.solutions)
-	p := sc.problems[problemId]
-	s := &Solution{
-		id:        solutionId,
-		problem:   p,
-		startTime: sc.currentTime,
-	}
-	sc.solutions = append(sc.solutions, s)
-	for i := range sc.schedules {
-		sc.schedules[i] = append(sc.schedules[i], s)
-	}
-	//debug("new", s, "for problem", problemId)
-}
-
-func (sc *Scheduler) HandleResponse(solutionId, test int, verdict string) {
-	s := sc.solutions[solutionId]
-	time := sc.currentTime - sc.startTime[Invocation{solutionId, test}]
-	sc.setVerdict(s, test, verdict != "OK", time)
-	sc.freeInvokerCount++
-}
-
-func (sc *Scheduler) ScheduleInvocations() []Invocation {
-	invocations := make([]Invocation, 0)
-	schedule := sc.schedules[0]
-	for i := 0; sc.freeInvokerCount > 0 && len(schedule) > 0; i++ {
-		j := 0
-		s := schedule[0]
-		if i < len(schedule) {
-			j = i
-			s = schedule[i]
-			if s.runningTests != 0 {
-				continue
-			}
-		}
-		if s.isDone {
-			schedule = append(schedule[:j], schedule[j+1:]...)
-			i--
-			continue
-		}
-		invocations = append(invocations, sc.NextInvocation(s))
-		sc.freeInvokerCount--
-	}
-	sc.schedules[0] = schedule
-	return invocations
-}
-
-func (sc *Scheduler) NextInvocation(s *Solution) Invocation {
-	s.runningTests++
-	invocation := Invocation{s.id, s.nextTest}
-	sc.startTime[invocation] = sc.currentTime
-	s.nextTest++
-	if s.nextTest == s.problem.testCount {
-		//debug(s, "is done (all tests scheduled)")
-		sc.setDone(s)
-	}
-	return invocation
-}
-
-func (sc *Scheduler) setVerdict(s *Solution, test int, rejected bool, time int) {
-	s.runningTests--
-	s.testsRun++
-	s.timeConsumed += time
-	if rejected && !s.isDone {
-		//debug(s, "is done (rejected)")
-		sc.setDone(s)
-	}
-}
-
-func (sc *Scheduler) setDone(s *Solution) {
-	s.isDone = true
-}
-
-func (sc *Scheduler) evaluateSchedule(schedule []*Solution) *big.Int {
-	score := big.NewInt(0)
-	t := sc.currentTime
-	for _, s := range schedule {
-		if s.isDone {
-			continue
-		}
-		testingTime := 0
-		if s.testsRun == 0 {
-			testingTime = s.problem.timeLimit * (s.problem.testCount - s.testsRun)
-		} else {
-			testingTime = s.timeConsumed * (s.problem.testCount - s.testsRun) / s.testsRun
-		}
-		t += testingTime
-		sTime := big.NewInt(int64(t-s.startTime) / TIME_STEP)
-		sTime3 := big.NewInt(0)
-		sTime3.Mul(sTime, sTime)
-		sTime3.Mul(sTime3, sTime)
-		score.Add(score, sTime3)
-	}
-	return score
 }
 
 func (s *Solution) String() string {

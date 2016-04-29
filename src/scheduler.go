@@ -13,6 +13,7 @@ import (
 const TIME_STEP = 10
 
 func main() {
+	rand.Seed(24536)
 	in := NewFastReader(os.Stdin)
 	out := bufio.NewWriter(os.Stdout)
 	defer out.Flush()
@@ -24,7 +25,25 @@ func main() {
 		testCount := in.NextInt()
 		sc.AddProblem(timeLimit, testCount)
 	}
+	tick := 0
 	for ; in.HasMore(); sc.NextTick() {
+		tick++
+		n := sc.schedule.Len()
+		if 0 < n && n < 1000 && tick%10 == 0 {
+			s0 := sc.schedule.Get(0).(*Solution)
+			if sc.schedule.Len() > s0.problem.testCount {
+				oldScore := sc.evaluateSchedule(sc.schedule)
+				newSchedule := sc.schedule.Copy()
+				for i := 0; i < 3; i++ {
+					newSchedule.MoveToFront(rand.Intn(n))
+				}
+				newScore := sc.evaluateSchedule(newSchedule)
+				if newScore < oldScore {
+					sc.schedule = newSchedule
+					debug(sc.currentTime, "schedule score is", oldScore, "improved to", newScore)
+				}
+			}
+		}
 		for {
 			problem := in.NextInt()
 			if problem == -1 {
@@ -42,7 +61,7 @@ func main() {
 			sc.HandleResponse(s, test, verdict)
 		}
 		for _, r := range sc.ScheduleInvocations() {
-			debug("scheduling test", r.test, "for", r.solutionId)
+			//debug("scheduling test", r.test, "for", r.solutionId)
 			fmt.Fprintln(out, r.solutionId, r.test)
 		}
 		fmt.Fprintln(out, -1, -1)
@@ -122,10 +141,8 @@ func (sc *Scheduler) AddSolution(problemId int) {
 		startTime: sc.currentTime,
 	}
 	sc.solutions = append(sc.solutions, s)
-	for i := 0; i < s.problem.testCount; i++ {
-		sc.schedule.PushBack(s)
-	}
-	debug("new", s, "for problem", problemId)
+	sc.schedule.PushBack(s)
+	//debug("new", s, "for problem", problemId)
 }
 
 func (sc *Scheduler) HandleResponse(solutionId, test int, verdict string) {
@@ -138,8 +155,9 @@ func (sc *Scheduler) HandleResponse(solutionId, test int, verdict string) {
 func (sc *Scheduler) ScheduleInvocations() []Invocation {
 	invocations := make([]Invocation, 0)
 	for sc.freeInvokerCount > 0 && sc.schedule.Len() > 0 {
-		s := sc.schedule.Remove(0).(*Solution)
+		s := sc.schedule.Get(0).(*Solution)
 		if s.isDone {
+			sc.schedule.Remove(0)
 			continue
 		}
 		invocations = append(invocations, sc.NextInvocation(s))
@@ -153,7 +171,7 @@ func (sc *Scheduler) NextInvocation(s *Solution) Invocation {
 	sc.startTime[invocation] = sc.currentTime
 	s.nextTest++
 	if s.nextTest == s.problem.testCount {
-		debug(s, "is done (all tests scheduled)")
+		//debug(s, "is done (all tests scheduled)")
 		sc.setDone(s)
 	}
 	return invocation
@@ -162,14 +180,9 @@ func (sc *Scheduler) NextInvocation(s *Solution) Invocation {
 func (sc *Scheduler) setVerdict(s *Solution, test int, rejected bool, time int) {
 	s.testsRun++
 	s.timeConsumed += time
-	if rejected {
-		debug(s, "is done (rejected)")
+	if rejected && !s.isDone {
+		//debug(s, "is done (rejected)")
 		sc.setDone(s)
-	}
-	if rejected || test == s.problem.testCount-1 {
-		debug(s, "is done; time:",
-			sc.currentTime-s.startTime, "total,",
-			s.timeConsumed, "consumed")
 	}
 }
 
@@ -177,8 +190,24 @@ func (sc *Scheduler) setDone(s *Solution) {
 	s.isDone = true
 }
 
+func (sc *Scheduler) evaluateSchedule(schedule *TreapArray) int64 {
+	score := int64(0)
+	t := sc.currentTime
+	for i := 0; i < schedule.Len(); i++ {
+		s := schedule.Get(i).(*Solution)
+		if s.isDone {
+			continue
+		}
+		testingTime := s.problem.timeLimit * (s.problem.testCount - s.testsRun)
+		t += testingTime
+		sTime := int64(t-s.startTime) / TIME_STEP
+		score += sTime * sTime * sTime
+	}
+	return score
+}
+
 func (s *Solution) String() string {
-	return fmt.Sprint("s ", s.id)
+	return fmt.Sprint("solution ", s.id)
 }
 
 type FastReader struct {
@@ -270,6 +299,23 @@ func (t *TreapArray) Len() int {
 	return t.root.size
 }
 
+func (t *TreapArray) Copy() *TreapArray {
+	return &TreapArray{t.root.copy()}
+}
+
+func (node *Node) copy() *Node {
+	if node == nil {
+		return nil
+	}
+	return &Node{
+		value:    node.value,
+		size:     node.size,
+		priority: node.priority,
+		left:     node.left.copy(),
+		right:    node.right.copy(),
+	}
+}
+
 func (t *TreapArray) PushBack(value interface{}) {
 	t.root = merge2(t.root, NewNode(value))
 }
@@ -292,6 +338,14 @@ func (t *TreapArray) Remove(index int) interface{} {
 	result := middle.value
 	t.root = merge2(left, right)
 	return result
+}
+
+func (t *TreapArray) MoveToFront(index int) {
+	left, middle, right := split3(t.root, index, index)
+	if middle == nil {
+		panic("TreapArray: index error")
+	}
+	t.root = merge3(middle, left, right)
 }
 
 func split3(node *Node, a, b int) (left, middle, right *Node) {

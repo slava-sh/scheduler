@@ -3,43 +3,12 @@ package main
 import (
 	"bufio"
 	"bytes"
-	"container/heap"
 	"fmt"
 	"io"
+	"math/rand"
 	"os"
 	"strings"
 )
-
-type Priority struct {
-	progress int
-	time     int
-	robin    int
-}
-
-func (a Priority) Less(b Priority) bool {
-	if a.progress != b.progress {
-		return a.progress > b.progress
-	}
-	if a.robin != b.robin {
-		return a.robin < b.robin
-	}
-	if a.time != b.time {
-		return a.time < b.time
-	}
-	return false
-}
-
-func (s *Solution) Priority() Priority {
-	var p Priority
-	p.progress = s.testsRun * 100 / s.problem.testCount / 40
-	p.robin = s.robin / 10
-	if s.testsRun == 0 {
-		p.time = s.problem.timeLimit * s.problem.testCount
-	} else {
-		p.time = s.timeConsumed * s.problem.testCount / s.testsRun
-	}
-	return p
-}
 
 const TIME_STEP = 10
 
@@ -73,7 +42,7 @@ func main() {
 			sc.HandleResponse(s, test, verdict)
 		}
 		debug("free invokers:", sc.freeInvokerCount)
-		debug("about", sc.pendingSolutions.Len(), "solutions pending")
+		debug("about", sc.schedule.Len(), "invocations pending")
 		for _, r := range sc.ScheduleInvocations() {
 			debug("scheduling test", r.test, "for", r.solutionId)
 			fmt.Fprintln(out, r.solutionId, r.test)
@@ -98,10 +67,9 @@ type Scheduler struct {
 	freeInvokerCount int
 	problems         []*Problem
 	solutions        []*Solution
-	pendingSolutions *PriorityQueue
+	schedule         *TreapArray
 	currentTime      int
 	startTime        map[Invocation]int
-	robinGenerator   int
 }
 
 type Problem struct {
@@ -113,23 +81,12 @@ type Problem struct {
 type Solution struct {
 	id           int
 	problem      *Problem
-	verdicts     []Verdict
 	isDone       bool
 	nextTest     int
 	testsRun     int
 	timeConsumed int
 	startTime    int
-	heapIndex    int
-	robin        int
 }
-
-type Verdict int
-
-const (
-	UNKNOWN Verdict = iota
-	ACCEPTED
-	REJECTED
-)
 
 type Invocation struct {
 	solutionId int
@@ -140,7 +97,7 @@ func NewScheduler(invokerCount int) *Scheduler {
 	return &Scheduler{
 		invokerCount:     invokerCount,
 		freeInvokerCount: invokerCount,
-		pendingSolutions: NewPriorityQueue(),
+		schedule:         NewTreapArray(),
 		startTime:        make(map[Invocation]int),
 	}
 }
@@ -165,31 +122,30 @@ func (sc *Scheduler) AddSolution(problemId int) {
 	s := &Solution{
 		id:        solutionId,
 		problem:   p,
-		verdicts:  make([]Verdict, p.testCount),
 		startTime: sc.currentTime,
-		robin:     sc.nextRobin(),
 	}
 	sc.solutions = append(sc.solutions, s)
-	sc.pendingSolutions.Push(s)
+	for i := 0; i < s.problem.testCount; i++ {
+		sc.schedule.PushBack(s)
+	}
 	debug("new", s, "for problem", problemId)
 }
 
 func (sc *Scheduler) HandleResponse(solutionId, test int, verdict string) {
 	s := sc.solutions[solutionId]
 	time := sc.currentTime - sc.startTime[Invocation{solutionId, test}]
-	if verdict == "OK" {
-		sc.setVerdict(s, test, ACCEPTED, time)
-	} else {
-		sc.setVerdict(s, test, REJECTED, time)
-	}
+	sc.setVerdict(s, test, verdict != "OK", time)
 	sc.freeInvokerCount++
 	debug("verdict for", s, "test", test, "is", verdict, "took", time, "ms")
 }
 
 func (sc *Scheduler) ScheduleInvocations() []Invocation {
 	invocations := make([]Invocation, 0)
-	for sc.freeInvokerCount > 0 && sc.pendingSolutions.Len() > 0 {
-		s := sc.pendingSolutions.Top()
+	for sc.freeInvokerCount > 0 && sc.schedule.Len() > 0 {
+		s := sc.schedule.Remove(0).(*Solution)
+		if s.isDone {
+			continue
+		}
 		invocations = append(invocations, sc.NextInvocation(s))
 		sc.freeInvokerCount--
 	}
@@ -199,46 +155,30 @@ func (sc *Scheduler) ScheduleInvocations() []Invocation {
 func (sc *Scheduler) NextInvocation(s *Solution) Invocation {
 	invocation := Invocation{s.id, s.nextTest}
 	sc.startTime[invocation] = sc.currentTime
-	s.robin = sc.nextRobin()
 	s.nextTest++
 	if s.nextTest == s.problem.testCount {
 		debug(s, "is done (all tests scheduled)")
 		sc.setDone(s)
 	}
-	if s.heapIndex != -1 {
-		sc.pendingSolutions.Update(s.heapIndex)
-	}
 	return invocation
 }
 
-func (sc *Scheduler) setVerdict(s *Solution, test int, verdict Verdict, time int) {
-	s.verdicts[test] = verdict
+func (sc *Scheduler) setVerdict(s *Solution, test int, rejected bool, time int) {
 	s.testsRun++
 	s.timeConsumed += time
-	if verdict == REJECTED {
+	if rejected {
 		debug(s, "is done (rejected)")
 		sc.setDone(s)
 	}
-	if verdict == REJECTED || test == s.problem.testCount-1 {
+	if rejected || test == s.problem.testCount-1 {
 		debug(s, "is done; time:",
 			sc.currentTime-s.startTime, "total,",
 			s.timeConsumed, "consumed")
-	}
-	if s.heapIndex != -1 {
-		sc.pendingSolutions.Update(s.heapIndex)
 	}
 }
 
 func (sc *Scheduler) setDone(s *Solution) {
 	s.isDone = true
-	if s.heapIndex != -1 {
-		sc.pendingSolutions.Remove(s.heapIndex)
-	}
-}
-
-func (sc *Scheduler) nextRobin() int {
-	sc.robinGenerator++
-	return sc.robinGenerator
 }
 
 func (s *Solution) String() string {
@@ -303,67 +243,118 @@ func parseInt(word string) int {
 	return result
 }
 
-type PriorityQueue struct {
-	heap pqHeap
+type TreapArray struct {
+	root *Node
 }
 
-func NewPriorityQueue() *PriorityQueue {
-	pq := new(PriorityQueue)
-	heap.Init(&pq.heap)
-	return pq
+type Node struct {
+	value    interface{}
+	size     int
+	priority int
+	left     *Node
+	right    *Node
 }
 
-func (pq *PriorityQueue) Push(item *Solution) {
-	heap.Push(&pq.heap, item)
+func NewNode(value interface{}) *Node {
+	return &Node{
+		value:    value,
+		size:     1,
+		priority: rand.Int(),
+	}
 }
 
-func (pq *PriorityQueue) Pop() *Solution {
-	return heap.Pop(&pq.heap).(*Solution)
+func NewTreapArray() *TreapArray {
+	return new(TreapArray)
 }
 
-func (pq *PriorityQueue) Remove(index int) *Solution {
-	return heap.Remove(&pq.heap, index).(*Solution)
+func (t *TreapArray) Len() int {
+	if t.root == nil {
+		return 0
+	}
+	return t.root.size
 }
 
-func (pq *PriorityQueue) Update(index int) {
-	heap.Fix(&pq.heap, index)
+func (t *TreapArray) PushBack(value interface{}) {
+	t.root = merge2(t.root, NewNode(value))
 }
 
-func (pq *PriorityQueue) Top() *Solution {
-	return pq.heap[0]
+func (t *TreapArray) Get(index int) interface{} {
+	left, middle, right := split3(t.root, index, index)
+	if middle == nil {
+		panic("TreapArray: index error")
+	}
+	result := middle.value
+	t.root = merge3(left, middle, right)
+	return result
 }
 
-func (pq *PriorityQueue) Len() int {
-	return len(pq.heap)
+func (t *TreapArray) Remove(index int) interface{} {
+	left, middle, right := split3(t.root, index, index)
+	if middle == nil {
+		panic("TreapArray: index error")
+	}
+	result := middle.value
+	t.root = merge2(left, right)
+	return result
 }
 
-type pqHeap []*Solution
-
-func (h pqHeap) Less(i, j int) bool {
-	return h[i].Priority().Less(h[j].Priority())
+func split3(node *Node, a, b int) (left, middle, right *Node) {
+	middle, right = split2(node, b)
+	left, middle = split2(middle, a-1)
+	return
 }
 
-func (h pqHeap) Swap(i, j int) {
-	h[i], h[j] = h[j], h[i]
-	h[i].heapIndex = i
-	h[j].heapIndex = j
+func merge3(left, middle, right *Node) *Node {
+	return merge2(merge2(left, middle), right)
 }
 
-func (h pqHeap) Len() int {
-	return len(h)
+func merge2(left, right *Node) *Node {
+	if left == nil {
+		return right
+	}
+	if right == nil {
+		return left
+	}
+	var result *Node
+	if left.priority > right.priority {
+		result = left
+		result.right = merge2(result.right, right)
+	} else {
+		result = right
+		result.left = merge2(left, result.left)
+	}
+	update(result)
+	return result
 }
 
-func (h *pqHeap) Push(x interface{}) {
-	item := x.(*Solution)
-	item.heapIndex = len(*h)
-	*h = append(*h, item)
+func split2(node *Node, index int) (left, right *Node) {
+	if node == nil {
+		return
+	}
+	nodeIndex := 0
+	if node.left != nil {
+		nodeIndex += node.left.size
+	}
+	if nodeIndex <= index {
+		node.right, right = split2(node.right, index-nodeIndex-1)
+		left = node
+	} else {
+		left, node.left = split2(node.left, index)
+		right = node
+	}
+	update(node)
+	return
 }
 
-func (h *pqHeap) Pop() interface{} {
-	old := *h
-	n := len(old)
-	item := old[n-1]
-	item.heapIndex = -1
-	*h = old[:n-1]
-	return item
+func update(node *Node) {
+	if node == nil {
+		return
+	}
+	node.size = 1
+	if node.left != nil {
+		node.size += node.left.size
+	}
+	if node.right != nil {
+		node.size += node.right.size
+	}
 }

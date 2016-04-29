@@ -5,7 +5,6 @@ import (
 	"bytes"
 	"fmt"
 	"io"
-	"math/big"
 	"math/rand"
 	"os"
 	"sort"
@@ -192,25 +191,23 @@ func (sc *Scheduler) schedule() Schedule {
 	return sc.schedules[0]
 }
 
-func (sc *Scheduler) evaluateSchedule(schedule Schedule) *big.Int {
-	score := big.NewInt(0)
-	t := sc.currentTime
+func (sc *Scheduler) scheduleScore(schedule Schedule) float64 {
+	score := float64(0)
+	t := float64(sc.currentTime)
 	for _, s := range schedule {
 		if s.isDone {
 			continue
 		}
-		testingTime := 0
+		var estTime float64
 		if s.testsRun == 0 {
-			testingTime = s.problem.timeLimit * (s.problem.testCount - s.testsRun)
+			estTime = float64(s.problem.timeLimit * s.problem.testCount)
 		} else {
-			testingTime = s.timeConsumed * (s.problem.testCount - s.testsRun) / s.testsRun
+			remainingRuns := s.problem.testCount - s.testsRun
+			estTime = float64(s.timeConsumed*remainingRuns) / float64(s.testsRun)
 		}
-		t += testingTime
-		sTime := big.NewInt(int64(t-s.startTime) / TIME_STEP)
-		sTime3 := big.NewInt(0)
-		sTime3.Mul(sTime, sTime)
-		sTime3.Mul(sTime3, sTime)
-		score.Add(score, sTime3)
+		t += estTime
+		sTime := (t - float64(s.startTime)) / TIME_STEP
+		score += sTime * sTime * sTime
 	}
 	return score
 }
@@ -225,12 +222,15 @@ func (sc *Scheduler) updateSchedules() {
 		}
 	}
 	sc.schedules = newSchedules
-	scores := make([]*big.Int, 0)
+	scores := make([]float64, 0)
 	for _, schedule := range sc.schedules {
-		scores = append(scores, sc.evaluateSchedule(schedule))
+		scores = append(scores, sc.scheduleScore(schedule))
 	}
 	sort.Sort(scheduleSorter{sc.schedules, scores})
 	sc.schedules = sc.schedules[:GA_POPULATION]
+	if len(sc.schedule()) > 10 {
+		debug(sc.schedule()[:10], scores[0])
+	}
 }
 
 func clean(schedule Schedule) Schedule {
@@ -275,7 +275,7 @@ func cross(a, b Schedule) Schedule {
 
 type scheduleSorter struct {
 	schedules []Schedule
-	scores    []*big.Int
+	scores    []float64
 }
 
 func (s scheduleSorter) Len() int {
@@ -288,7 +288,7 @@ func (s scheduleSorter) Swap(i, j int) {
 }
 
 func (s scheduleSorter) Less(i, j int) bool {
-	return s.scores[i].Cmp(s.scores[j]) < 0
+	return s.scores[i] < s.scores[j]
 }
 
 func (s *Solution) String() string {

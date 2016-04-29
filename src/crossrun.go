@@ -52,18 +52,31 @@ func run(test int) int {
 }
 
 func main() {
-	const NUM_TESTS = 10
-	scores := make([]int, NUM_TESTS)
+	tests := make([]int, 0)
+	if len(os.Args) > 1 {
+		for _, word := range os.Args[1:] {
+			test, err := strconv.Atoi(word)
+			if err != nil {
+				log.Panic(err)
+			}
+			tests = append(tests, test)
+		}
+	} else {
+		for i := 1; i <= 10; i++ {
+			tests = append(tests, i)
+		}
+	}
+	scores := make(map[int]int)
 	fmt.Printf("Test\tScore\n")
 	var wg sync.WaitGroup
-	for i := range scores {
+	for _, test := range tests {
 		wg.Add(1)
-		go func(i int) {
+		go func(test int) {
 			defer wg.Done()
-			score := run(i + 1)
-			scores[i] = score
-			fmt.Printf("%v\t%v\n", i+1, score)
-		}(i)
+			score := run(test)
+			scores[test] = score
+			fmt.Printf("%v\t%v\n", test, score)
+		}(test)
 	}
 	wg.Wait()
 	sum := 0

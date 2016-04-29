@@ -12,6 +12,7 @@ import (
 
 type Priority struct {
 	progress int
+	time     int
 	robin    int
 }
 
@@ -22,13 +23,21 @@ func (a Priority) Less(b Priority) bool {
 	if a.robin != b.robin {
 		return a.robin < b.robin
 	}
+	if a.time != b.time {
+		return a.time < b.time
+	}
 	return false
 }
 
 func (s *Solution) Priority() Priority {
 	var p Priority
-	p.progress = s.testsRun * 100 / s.problem.testCount / 34
-	p.robin = s.robin
+	p.progress = s.testsRun * 100 / s.problem.testCount / 40
+	p.robin = s.robin / 10
+	if s.testsRun == 0 {
+		p.time = s.problem.timeLimit * s.problem.testCount
+	} else {
+		p.time = s.timeConsumed * s.problem.testCount / s.testsRun
+	}
 	return p
 }
 

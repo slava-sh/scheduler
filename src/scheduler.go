@@ -12,8 +12,12 @@ import (
 )
 
 const TIME_STEP = 10
-const NUM_SCHEDULES = 10
-const NUM_MUTATIONS = 3
+
+const (
+	NUM_SCHEDULES = 30
+	NUM_MUTATIONS = 5
+	NUM_ALPHAS    = 3
+)
 
 func main() {
 	rand.Seed(24536)
@@ -119,6 +123,11 @@ func (sc *Scheduler) NextTick() {
 				newSchedules = append(newSchedules, mutate(schedule))
 			}
 		}
+		//for i := 0; i < len(sc.schedules) && i < NUM_ALPHAS; i++ {
+		//	for j := i + 1; j < len(sc.schedules) && j < NUM_ALPHAS; j++ {
+		//		newSchedules = append(newSchedules, cross(sc.schedules[i], sc.schedules[j]))
+		//	}
+		//}
 		sc.schedules = newSchedules
 		scores := make([]int64, 0)
 		for _, schedule := range sc.schedules {
@@ -147,6 +156,26 @@ func mutate(schedule Schedule) Schedule {
 		newSchedule[i], newSchedule[j] = newSchedule[j], newSchedule[i]
 	}
 	return newSchedule
+}
+
+func cross(a, b Schedule) Schedule {
+	result := make(Schedule, 0)
+	used := make(map[*Solution]bool)
+	for len(a) != 0 && len(b) != 0 {
+		var s *Solution
+		if len(a) == 0 && rand.Intn(1) == 0 {
+			s = b[0]
+			b = b[1:]
+		} else {
+			s = a[0]
+			a = a[1:]
+		}
+		if !used[s] {
+			used[s] = true
+			result = append(result, s)
+		}
+	}
+	return result
 }
 
 type scheduleSorter struct {
@@ -256,7 +285,12 @@ func (sc *Scheduler) evaluateSchedule(schedule []*Solution) int64 {
 		if s.isDone {
 			continue
 		}
-		testingTime := s.problem.timeLimit * (s.problem.testCount - s.testsRun)
+		testingTime := 0
+		if s.testsRun == 0 {
+			testingTime = s.problem.timeLimit * (s.problem.testCount - s.testsRun)
+		} else {
+			testingTime = s.timeConsumed * (s.problem.testCount - s.testsRun) / s.testsRun
+		}
 		t += testingTime
 		sTime := int64(t-s.startTime) / TIME_STEP
 		score += sTime * sTime * sTime

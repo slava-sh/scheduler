@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"fmt"
 	"io"
+	"math/big"
 	"math/rand"
 	"os"
 	"sort"
@@ -16,7 +17,7 @@ const TIME_STEP = 10
 const (
 	NUM_SCHEDULES = 30
 	NUM_MUTATIONS = 5
-	NUM_ALPHAS    = 3
+	//NUM_ALPHAS    = 3
 )
 
 func main() {
@@ -129,13 +130,30 @@ func (sc *Scheduler) NextTick() {
 		//	}
 		//}
 		sc.schedules = newSchedules
-		scores := make([]int64, 0)
+		scores := make([]*big.Int, 0)
 		for _, schedule := range sc.schedules {
 			scores = append(scores, sc.evaluateSchedule(schedule))
 		}
+		//best := append(Schedule{}, sc.schedules[0]...)
+		//bestScore := scores[0]
 		sort.Sort(scheduleSorter{sc.schedules, scores})
 		sc.schedules = sc.schedules[:NUM_SCHEDULES]
+		//if len(sc.schedules[0]) > 10 && !same(sc.schedules[0], best) {
+		//	debug(sc.schedules[0][:10], scores[0], bestScore)
+		//}
 	}
+}
+
+func same(a, b Schedule) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
 }
 
 func clean(schedule Schedule) Schedule {
@@ -180,7 +198,7 @@ func cross(a, b Schedule) Schedule {
 
 type scheduleSorter struct {
 	schedules []Schedule
-	scores    []int64
+	scores    []*big.Int
 }
 
 func (s scheduleSorter) Len() int {
@@ -193,7 +211,7 @@ func (s scheduleSorter) Swap(i, j int) {
 }
 
 func (s scheduleSorter) Less(i, j int) bool {
-	return s.scores[i] < s.scores[j]
+	return s.scores[i].Cmp(s.scores[j]) < 0
 }
 
 func (sc *Scheduler) AddProblem(timeLimit, testCount int) {
@@ -278,8 +296,8 @@ func (sc *Scheduler) setDone(s *Solution) {
 	s.isDone = true
 }
 
-func (sc *Scheduler) evaluateSchedule(schedule []*Solution) int64 {
-	score := int64(0)
+func (sc *Scheduler) evaluateSchedule(schedule []*Solution) *big.Int {
+	score := big.NewInt(0)
 	t := sc.currentTime
 	for _, s := range schedule {
 		if s.isDone {
@@ -292,14 +310,17 @@ func (sc *Scheduler) evaluateSchedule(schedule []*Solution) int64 {
 			testingTime = s.timeConsumed * (s.problem.testCount - s.testsRun) / s.testsRun
 		}
 		t += testingTime
-		sTime := int64(t-s.startTime) / TIME_STEP
-		score += sTime * sTime * sTime
+		sTime := big.NewInt(int64(t-s.startTime) / TIME_STEP)
+		sTime3 := big.NewInt(0)
+		sTime3.Mul(sTime, sTime)
+		sTime3.Mul(sTime3, sTime)
+		score.Add(score, sTime3)
 	}
 	return score
 }
 
 func (s *Solution) String() string {
-	return fmt.Sprint("solution ", s.id)
+	return fmt.Sprint(s.id)
 }
 
 type FastReader struct {

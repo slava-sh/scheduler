@@ -101,7 +101,7 @@ type Scheduler struct {
 	pendingSolutions *PriorityQueue
 	currentTime      int
 	startTime        map[Invocation]int
-	robinGenereator  int
+	robinGenerator   int
 }
 
 type Problem struct {
@@ -237,8 +237,8 @@ func (sc *Scheduler) setDone(s *Solution) {
 }
 
 func (sc *Scheduler) nextRobin() int {
-	sc.robinGenereator++
-	return sc.robinGenereator
+	sc.robinGenerator++
+	return sc.robinGenerator
 }
 
 func (s *Solution) String() string {

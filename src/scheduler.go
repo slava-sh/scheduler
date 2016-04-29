@@ -28,15 +28,14 @@ func main() {
 	tick := 0
 	for ; in.HasMore(); sc.NextTick() {
 		tick++
-		n := sc.schedule.Len()
-		if 0 < n && n < 1000 && tick%10 == 0 {
-			s0 := sc.schedule.Get(0).(*Solution)
-			if sc.schedule.Len() > s0.problem.testCount {
+		n := len(sc.schedule)
+		if n != 0 && tick%n == 0 {
+			for i := 0; i < 5; i++ {
 				oldScore := sc.evaluateSchedule(sc.schedule)
-				newSchedule := sc.schedule.Copy()
-				for i := 0; i < 3; i++ {
-					newSchedule.MoveToFront(rand.Intn(n))
-				}
+				i := rand.Intn(n)
+				j := rand.Intn(n)
+				newSchedule := append([]*Solution{}, sc.schedule...)
+				newSchedule[i], newSchedule[j] = newSchedule[j], newSchedule[i]
 				newScore := sc.evaluateSchedule(newSchedule)
 				if newScore < oldScore {
 					sc.schedule = newSchedule
@@ -84,7 +83,7 @@ type Scheduler struct {
 	freeInvokerCount int
 	problems         []*Problem
 	solutions        []*Solution
-	schedule         *TreapArray
+	schedule         []*Solution
 	currentTime      int
 	startTime        map[Invocation]int
 }
@@ -114,7 +113,7 @@ func NewScheduler(invokerCount int) *Scheduler {
 	return &Scheduler{
 		invokerCount:     invokerCount,
 		freeInvokerCount: invokerCount,
-		schedule:         NewTreapArray(),
+		schedule:         make([]*Solution, 0),
 		startTime:        make(map[Invocation]int),
 	}
 }
@@ -141,7 +140,7 @@ func (sc *Scheduler) AddSolution(problemId int) {
 		startTime: sc.currentTime,
 	}
 	sc.solutions = append(sc.solutions, s)
-	sc.schedule.PushBack(s)
+	sc.schedule = append(sc.schedule, s)
 	//debug("new", s, "for problem", problemId)
 }
 
@@ -154,10 +153,10 @@ func (sc *Scheduler) HandleResponse(solutionId, test int, verdict string) {
 
 func (sc *Scheduler) ScheduleInvocations() []Invocation {
 	invocations := make([]Invocation, 0)
-	for sc.freeInvokerCount > 0 && sc.schedule.Len() > 0 {
-		s := sc.schedule.Get(0).(*Solution)
+	for sc.freeInvokerCount > 0 && len(sc.schedule) > 0 {
+		s := sc.schedule[0]
 		if s.isDone {
-			sc.schedule.Remove(0)
+			sc.schedule = sc.schedule[1:]
 			continue
 		}
 		invocations = append(invocations, sc.NextInvocation(s))
@@ -190,11 +189,10 @@ func (sc *Scheduler) setDone(s *Solution) {
 	s.isDone = true
 }
 
-func (sc *Scheduler) evaluateSchedule(schedule *TreapArray) int64 {
+func (sc *Scheduler) evaluateSchedule(schedule []*Solution) int64 {
 	score := int64(0)
 	t := sc.currentTime
-	for i := 0; i < schedule.Len(); i++ {
-		s := schedule.Get(i).(*Solution)
+	for _, s := range schedule {
 		if s.isDone {
 			continue
 		}
@@ -266,145 +264,4 @@ func parseInt(word string) int {
 	}
 	result *= sign
 	return result
-}
-
-type TreapArray struct {
-	root *Node
-}
-
-type Node struct {
-	value    interface{}
-	size     int
-	priority int
-	left     *Node
-	right    *Node
-}
-
-func NewNode(value interface{}) *Node {
-	return &Node{
-		value:    value,
-		size:     1,
-		priority: rand.Int(),
-	}
-}
-
-func NewTreapArray() *TreapArray {
-	return new(TreapArray)
-}
-
-func (t *TreapArray) Len() int {
-	if t.root == nil {
-		return 0
-	}
-	return t.root.size
-}
-
-func (t *TreapArray) Copy() *TreapArray {
-	return &TreapArray{t.root.copy()}
-}
-
-func (node *Node) copy() *Node {
-	if node == nil {
-		return nil
-	}
-	return &Node{
-		value:    node.value,
-		size:     node.size,
-		priority: node.priority,
-		left:     node.left.copy(),
-		right:    node.right.copy(),
-	}
-}
-
-func (t *TreapArray) PushBack(value interface{}) {
-	t.root = merge2(t.root, NewNode(value))
-}
-
-func (t *TreapArray) Get(index int) interface{} {
-	left, middle, right := split3(t.root, index, index)
-	if middle == nil {
-		panic("TreapArray: index error")
-	}
-	result := middle.value
-	t.root = merge3(left, middle, right)
-	return result
-}
-
-func (t *TreapArray) Remove(index int) interface{} {
-	left, middle, right := split3(t.root, index, index)
-	if middle == nil {
-		panic("TreapArray: index error")
-	}
-	result := middle.value
-	t.root = merge2(left, right)
-	return result
-}
-
-func (t *TreapArray) MoveToFront(index int) {
-	left, middle, right := split3(t.root, index, index)
-	if middle == nil {
-		panic("TreapArray: index error")
-	}
-	t.root = merge3(middle, left, right)
-}
-
-func split3(node *Node, a, b int) (left, middle, right *Node) {
-	middle, right = split2(node, b)
-	left, middle = split2(middle, a-1)
-	return
-}
-
-func merge3(left, middle, right *Node) *Node {
-	return merge2(merge2(left, middle), right)
-}
-
-func merge2(left, right *Node) *Node {
-	if left == nil {
-		return right
-	}
-	if right == nil {
-		return left
-	}
-	var result *Node
-	if left.priority > right.priority {
-		result = left
-		result.right = merge2(result.right, right)
-	} else {
-		result = right
-		result.left = merge2(left, result.left)
-	}
-	update(result)
-	return result
-}
-
-func split2(node *Node, index int) (left, right *Node) {
-	if node == nil {
-		return
-	}
-	nodeIndex := 0
-	if node.left != nil {
-		nodeIndex += node.left.size
-	}
-	if nodeIndex <= index {
-		node.right, right = split2(node.right, index-nodeIndex-1)
-		left = node
-	} else {
-		left, node.left = split2(node.left, index)
-		right = node
-	}
-	update(node)
-	return
-}
-
-func update(node *Node) {
-	if node == nil {
-		return
-	}
-	node.size = 1
-	if node.left != nil {
-		node.size += node.left.size
-	}
-	if node.right != nil {
-		node.size += node.right.size
-	}
 }

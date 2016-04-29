@@ -123,7 +123,7 @@ int main(int argc, char* argv[])
     //fflush(stdout);
     
     submissions.clear();
-    printf("SubmitTime,Problem,InvokerTime,Invocations,TestCount\n");
+    printf("SubmitTime,Problem,InvokerTime,Invocations,TestCount,TL\n");
     while (true) {
     	int submitTime = inf.readInt();
         int invokerTime = 0;
@@ -153,7 +153,9 @@ int main(int argc, char* argv[])
     	if (!submissions.empty())
     	    assert(submissions.back().submitTime <= submitTime);
     	submissions.push_back(Submission(submitTime, problemId, verdicts));
-        printf("%d,%d,%d,%d,%d\n", submitTime, problemId, invokerTime, invocations, verdicts.size());
+        printf("%d,%d,%d,%d,%d,%d\n",
+                submitTime, problemId, invokerTime,
+                invocations, verdicts.size(), problems[problemId].timeLimit);
     }
     return 0;
 

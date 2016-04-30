@@ -66,6 +66,7 @@ func main() {
 		sc.NextTick()
 	}
 	fmt.Fprintln(os.Stderr, updates, "updates in", ticks, "ticks")
+	fmt.Fprintln(os.Stderr, len(sc.solutions), "solutions")
 }
 
 var debugFlag string
@@ -230,7 +231,7 @@ func (sc *Scheduler) UpdateSchedules() {
 	newSchedules := sc.generateNewSchedules()
 	scores := make([]float64, 0)
 	for _, schedule := range newSchedules {
-		scores = append(scores, sc.scheduleScore(schedule))
+		scores = append(scores, sc.scheduleScore(schedule.schedule))
 	}
 	sort.Sort(scheduleSorter{newSchedules, scores})
 
@@ -240,37 +241,40 @@ func (sc *Scheduler) UpdateSchedules() {
 		if len(sc.schedules) == GA_POPULATION {
 			break
 		}
-		hash := schedule.hash()
+		hash := schedule.schedule.hash()
 		if i != 0 && hash == prevHash {
 			continue
 		}
-		sc.schedules = append(sc.schedules, schedule)
+		sc.schedules = append(sc.schedules, schedule.schedule)
 		prevHash = hash
-	}
 
-	if debugEnabled && len(sc.schedules) > 1 {
-		for i, schedule := range sc.schedules {
+		if debugEnabled {
 			line := new(bytes.Buffer)
-			fmt.Fprintf(line, "%.0f %d %d:", scores[i], schedule.hash(), sc.currentTime)
-			for _, s := range schedule {
+			fmt.Fprintf(line, "%.0f %s %d:", scores[i], schedule.origin, sc.currentTime)
+			for _, s := range schedule.schedule {
 				fmt.Fprintf(line, " (%d, %d, %.0f),", s.id, s.startTime, sc.estimateInvokerTime(s))
 			}
 			debug(line.String())
 		}
-		debug()
 	}
+	debug()
 }
 
-func (sc *Scheduler) generateNewSchedules() []Schedule {
-	newSchedules := make([]Schedule, 0)
+type NewSchedule struct {
+	schedule Schedule
+	origin   string
+}
+
+func (sc *Scheduler) generateNewSchedules() []NewSchedule {
+	newSchedules := make([]NewSchedule, 0)
 	for _, schedule := range sc.schedules {
-		newSchedules = append(newSchedules, clean(schedule))
+		newSchedules = append(newSchedules, NewSchedule{clean(schedule), "clean"})
 	}
 	for i := 0; i < GA_POPULATION && i < len(newSchedules); i++ {
-		newSchedules = append(newSchedules, mutate(newSchedules[i]))
+		newSchedules = append(newSchedules, NewSchedule{mutate(newSchedules[i].schedule), "mutate"})
 		for j := i + 1; j < GA_MATING_POPULATION && j < len(newSchedules); j++ {
 			for k := 0; k < GA_MATING_CHILDREN; k++ {
-				newSchedules = append(newSchedules, cross(newSchedules[i], newSchedules[j]))
+				newSchedules = append(newSchedules, NewSchedule{cross(newSchedules[i].schedule, newSchedules[j].schedule), "cross"})
 			}
 		}
 	}
@@ -329,7 +333,7 @@ func cross(a, b Schedule) Schedule {
 }
 
 type scheduleSorter struct {
-	schedules []Schedule
+	schedules []NewSchedule
 	scores    []float64
 }
 

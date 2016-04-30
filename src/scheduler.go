@@ -186,16 +186,19 @@ func (sc *Scheduler) HandleResponse(solutionId, test int, verdict string) {
 }
 
 func (sc *Scheduler) ScheduleInvocations() []Invocation {
+	if sc.freeInvokerCount == 0 {
+		return nil
+	}
 	invocations := make([]Invocation, 0)
 	for _, s := range sc.schedule() {
-		if sc.freeInvokerCount == 0 {
-			break
-		}
 		if s.isDone || s.runningTests != 0 {
 			continue
 		}
 		invocations = append(invocations, sc.nextInvocation(s))
 		sc.freeInvokerCount--
+		if sc.freeInvokerCount == 0 {
+			break
+		}
 	}
 	for _, s := range sc.schedule() {
 		if sc.freeInvokerCount == 0 {
@@ -246,7 +249,7 @@ func (sc *Scheduler) scheduleScore(schedule Schedule) float64 {
 }
 
 func (sc *Scheduler) UpdateSchedules() {
-	if len(sc.schedules[0]) == 0 {
+	if len(sc.schedule()) == 0 {
 		return
 	}
 	newSchedules := make([]Schedule, 0)

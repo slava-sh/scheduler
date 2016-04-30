@@ -117,9 +117,12 @@ type Scheduler struct {
 type Schedule []*Solution
 
 type Problem struct {
-	id        int
-	timeLimit int
-	testCount int
+	id          int
+	timeLimit   int
+	testCount   int
+	totalTime   []float64
+	totalRuns   []int
+	averageTime *Fenwick
 }
 
 type Solution struct {
@@ -154,7 +157,19 @@ func (sc *Scheduler) NextTick() {
 func (sc *Scheduler) AddProblem(timeLimit, testCount int) {
 	problemId := len(sc.problems)
 	debug("problem", problemId, "has", testCount, "tests and ML", timeLimit, "ms")
-	p := &Problem{problemId, timeLimit, testCount}
+	p := &Problem{
+		id:          problemId,
+		timeLimit:   timeLimit,
+		testCount:   testCount,
+		totalTime:   make([]float64, testCount),
+		totalRuns:   make([]int, testCount),
+		averageTime: NewFenwick(testCount),
+	}
+	for i := range p.totalTime {
+		p.totalTime[i] = float64(timeLimit)
+		p.totalRuns[i] = 1
+		p.averageTime.Set(i, float64(timeLimit))
+	}
 	sc.problems = append(sc.problems, p)
 }
 
@@ -181,6 +196,10 @@ func (sc *Scheduler) HandleResponse(solutionId, test int, verdict string) {
 	if verdict != "OK" {
 		s.isDone = true
 	}
+	s.problem.totalTime[test] += float64(time)
+	s.problem.totalRuns[test]++
+	newAverageTime := s.problem.totalTime[test] / float64(s.problem.totalRuns[test])
+	s.problem.averageTime.Set(test, newAverageTime)
 	sc.freeInvokerCount++
 }
 
@@ -241,12 +260,7 @@ func (sc *Scheduler) scheduleScore(schedule Schedule) float64 {
 }
 
 func (sc *Scheduler) estimateInvokerTime(s *Solution) float64 {
-	if s.testsRun == 0 {
-		return float64(s.problem.timeLimit * s.problem.testCount)
-	} else {
-		remainingRuns := s.problem.testCount - s.testsRun
-		return float64(s.timeConsumed*remainingRuns) / float64(s.testsRun)
-	}
+	return s.problem.averageTime.Sum(s.testsRun, s.problem.testCount-1)
 }
 
 func (sc *Scheduler) UpdateSchedules() {
@@ -428,4 +442,49 @@ func parseInt(word string) int {
 	}
 	result *= sign
 	return result
+}
+
+type Fenwick struct {
+	size int
+	sum  []float64
+}
+
+func NewFenwick(size int) *Fenwick {
+	return &Fenwick{
+		size,
+		make([]float64, size+1),
+	}
+}
+
+func step(x int) int {
+	return x & -x
+}
+
+func (f *Fenwick) Add(pos int, value float64) {
+	for i := pos + 1; i <= f.size; i += step(i) {
+		f.sum[i] += value
+	}
+}
+
+func (f *Fenwick) prefixSum(pos int) float64 {
+	var result float64
+	for i := pos + 1; i > 0; i -= step(i) {
+		result += f.sum[i]
+	}
+	return result
+}
+
+func (f *Fenwick) Sum(a, b int) float64 {
+	if a > b {
+		return 0
+	}
+	return f.prefixSum(b) - f.prefixSum(a-1)
+}
+
+func (f *Fenwick) Get(pos int) float64 {
+	return f.Sum(pos, pos)
+}
+
+func (f *Fenwick) Set(pos int, value float64) {
+	f.Add(pos, value-f.Get(pos))
 }

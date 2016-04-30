@@ -241,12 +241,8 @@ func (sc *Scheduler) scheduleScore(schedule Schedule) float64 {
 }
 
 func (sc *Scheduler) estimateInvokerTime(s *Solution) float64 {
-	if s.testsRun == 0 {
-		return float64(s.problem.timeLimit * s.problem.testCount)
-	} else {
-		remainingRuns := s.problem.testCount - s.testsRun
-		return float64(s.timeConsumed*remainingRuns) / float64(s.testsRun)
-	}
+	remainingRuns := s.problem.testCount - s.testsRun
+	return float64(s.problem.timeLimit * remainingRuns)
 }
 
 func (sc *Scheduler) UpdateSchedules() {

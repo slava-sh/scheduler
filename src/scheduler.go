@@ -127,7 +127,6 @@ type Solution struct {
 	problem      *Problem
 	isDone       bool
 	nextTest     int
-	testsRun     int
 	startTime    int
 	runningTests int
 }
@@ -174,7 +173,6 @@ func (sc *Scheduler) AddSolution(problemId int) {
 func (sc *Scheduler) HandleResponse(solutionId, test int, verdict string) {
 	s := sc.solutions[solutionId]
 	s.runningTests--
-	s.testsRun++
 	if verdict != "OK" {
 		s.isDone = true
 	}
@@ -238,7 +236,7 @@ func (sc *Scheduler) scheduleScore(schedule Schedule) float64 {
 }
 
 func (sc *Scheduler) estimateInvokerTime(s *Solution) float64 {
-	remainingRuns := s.problem.testCount - s.testsRun
+	remainingRuns := s.problem.testCount - s.nextTest
 	return float64(s.problem.timeLimit * remainingRuns)
 }
 

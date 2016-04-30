@@ -207,45 +207,82 @@ func (sc *Scheduler) scheduleScore(schedule Schedule) float64 {
 		if s.isDone {
 			continue
 		}
-		var estTime float64
-		if s.testsRun == 0 {
-			estTime = float64(s.problem.timeLimit * s.problem.testCount)
-		} else {
-			remainingRuns := s.problem.testCount - s.testsRun
-			estTime = float64(s.timeConsumed*remainingRuns) / float64(s.testsRun)
-		}
-		t += estTime
-		sTime := (t - float64(s.startTime)) / TIME_STEP
+		t += sc.estimateInvokerTime(s)
+		sTime := t - float64(s.startTime)
 		score += sTime * sTime * sTime
 	}
 	return score
+}
+
+func (sc *Scheduler) estimateInvokerTime(s *Solution) float64 {
+	if s.testsRun == 0 {
+		return float64(s.problem.timeLimit * s.problem.testCount)
+	} else {
+		remainingRuns := s.problem.testCount - s.testsRun
+		return float64(s.timeConsumed*remainingRuns) / float64(s.testsRun)
+	}
 }
 
 func (sc *Scheduler) UpdateSchedules() {
 	if len(sc.schedule()) == 0 {
 		return
 	}
+	newSchedules := sc.generateNewSchedules()
+	scores := make([]float64, 0)
+	for _, schedule := range newSchedules {
+		scores = append(scores, sc.scheduleScore(schedule))
+	}
+	sort.Sort(scheduleSorter{newSchedules, scores})
+
+	sc.schedules = sc.schedules[:0]
+	prevHash := int64(0)
+	for i, schedule := range newSchedules {
+		if len(sc.schedules) == GA_POPULATION {
+			break
+		}
+		hash := schedule.hash()
+		if i != 0 && hash == prevHash {
+			continue
+		}
+		sc.schedules = append(sc.schedules, schedule)
+		prevHash = hash
+	}
+
+	if debugEnabled && len(sc.schedules) > 1 {
+		for i, schedule := range sc.schedules {
+			line := new(bytes.Buffer)
+			fmt.Fprintf(line, "%.0f %d %d:", scores[i], schedule.hash(), sc.currentTime)
+			for _, s := range schedule {
+				fmt.Fprintf(line, " (%d, %d, %.0f),", s.id, s.startTime, sc.estimateInvokerTime(s))
+			}
+			debug(line.String())
+		}
+		debug()
+	}
+}
+
+func (sc *Scheduler) generateNewSchedules() []Schedule {
 	newSchedules := make([]Schedule, 0)
 	for _, schedule := range sc.schedules {
 		newSchedules = append(newSchedules, clean(schedule))
 	}
-	if len(newSchedules[0]) != 0 {
-		for i := 0; i < GA_POPULATION; i++ {
-			newSchedules = append(newSchedules, mutate(newSchedules[i]))
-			for j := i + 1; j < GA_MATING_POPULATION; j++ {
-				for k := 0; k < GA_MATING_CHILDREN; k++ {
-					newSchedules = append(newSchedules, cross(newSchedules[i], newSchedules[j]))
-				}
+	for i := 0; i < GA_POPULATION && i < len(newSchedules); i++ {
+		newSchedules = append(newSchedules, mutate(newSchedules[i]))
+		for j := i + 1; j < GA_MATING_POPULATION && j < len(newSchedules); j++ {
+			for k := 0; k < GA_MATING_CHILDREN; k++ {
+				newSchedules = append(newSchedules, cross(newSchedules[i], newSchedules[j]))
 			}
 		}
 	}
-	sc.schedules = newSchedules
-	scores := make([]float64, 0)
-	for _, schedule := range sc.schedules {
-		scores = append(scores, sc.scheduleScore(schedule))
+	return newSchedules
+}
+
+func (schedule Schedule) hash() int64 {
+	result := int64(0)
+	for _, s := range schedule {
+		result = result*4999999 + int64(s.id)
 	}
-	sort.Sort(scheduleSorter{sc.schedules, scores})
-	sc.schedules = sc.schedules[:GA_POPULATION]
+	return result
 }
 
 func clean(schedule Schedule) Schedule {

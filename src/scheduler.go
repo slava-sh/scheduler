@@ -9,6 +9,8 @@ import (
 	"os"
 	"sort"
 	"strings"
+	"sync"
+	"time"
 )
 
 const (
@@ -16,6 +18,7 @@ const (
 	GA_POPULATION     = 15
 	GA_MUTATIONS      = 5
 	GA_MUTATION_SWAPS = 2
+	UPDATE_TIME       = 1 * time.Millisecond
 )
 
 const TIME_STEP = 10
@@ -34,20 +37,33 @@ func main() {
 		sc.AddProblem(timeLimit, testCount)
 	}
 	updates := 0
+	m := new(sync.Mutex)
+	go func() {
+		for {
+			m.Lock()
+			sc.UpdateSchedules()
+			m.Unlock()
+			updates++
+			time.Sleep(UPDATE_TIME)
+		}
+	}()
 	ticks := 0
 	for in.HasMore() {
 		ticks++
+		newSolutions := make([]int, 0)
 		for {
 			problem := in.NextInt()
 			if problem == -1 {
 				break
 			}
-			sc.AddSolution(problem)
+			newSolutions = append(newSolutions, problem)
 		}
-		if ticks%(len(sc.schedule())*3+1) == 0 {
-			sc.UpdateSchedules()
-			updates++
+		type Response struct {
+			solutionId int
+			test       int
+			verdict    string
 		}
+		responses := make([]Response, 0)
 		for {
 			solutionId := in.NextInt()
 			test := in.NextInt()
@@ -55,14 +71,25 @@ func main() {
 				break
 			}
 			verdict := in.NextWord()
-			sc.HandleResponse(solutionId, test, verdict)
+			responses = append(responses, Response{solutionId, test, verdict})
 		}
-		for _, r := range sc.ScheduleInvocations() {
+
+		m.Lock()
+		for _, problem := range newSolutions {
+			sc.AddSolution(problem)
+		}
+		for _, r := range responses {
+			sc.HandleResponse(r.solutionId, r.test, r.verdict)
+		}
+		invocations := sc.ScheduleInvocations()
+		sc.NextTick()
+		m.Unlock()
+
+		for _, r := range invocations {
 			fmt.Fprintln(out, r.solutionId, r.test)
 		}
 		fmt.Fprintln(out, -1, -1)
 		out.Flush()
-		sc.NextTick()
 	}
 	fmt.Fprintln(os.Stderr, updates, "updates in", ticks, "ticks")
 }

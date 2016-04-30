@@ -195,6 +195,11 @@ func (sc *Scheduler) HandleResponse(solutionId, test int, verdict string) {
 	s.timeConsumed += time
 	if verdict != "OK" {
 		s.isDone = true
+		for t := test + 1; t < s.problem.testCount; t++ {
+			s.problem.totalRuns[t]++
+			newAverageTime := s.problem.totalTime[t] / float64(s.problem.totalRuns[t])
+			s.problem.averageTime.Set(t, newAverageTime)
+		}
 	}
 	s.problem.totalTime[test] += float64(time)
 	s.problem.totalRuns[test]++

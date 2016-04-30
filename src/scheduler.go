@@ -38,33 +38,55 @@ func main() {
 		sc.AddProblem(timeLimit, testCount)
 	}
 	updates := 0
+	m := new(sync.Mutex)
 	go func() {
 		for {
+			m.Lock()
 			sc.UpdateSchedules()
+			m.Unlock()
 			updates++
 			time.Sleep(UPDATE_TIME)
 		}
 	}()
 	ticks := 0
-	for ; in.HasMore(); sc.NextTick() {
+	for in.HasMore() {
 		ticks++
+		newSolutions := make([]int, 0)
 		for {
 			problem := in.NextInt()
 			if problem == -1 {
 				break
 			}
-			sc.AddSolution(problem)
+			newSolutions = append(newSolutions, problem)
 		}
+		type Response struct {
+			solutionId int
+			test       int
+			verdict    string
+		}
+		responses := make([]Response, 0)
 		for {
-			s := in.NextInt()
+			solutionId := in.NextInt()
 			test := in.NextInt()
-			if s == -1 && test == -1 {
+			if solutionId == -1 && test == -1 {
 				break
 			}
 			verdict := in.NextWord()
-			sc.HandleResponse(s, test, verdict)
+			responses = append(responses, Response{solutionId, test, verdict})
 		}
-		for _, r := range sc.ScheduleInvocations() {
+
+		m.Lock()
+		for _, problem := range newSolutions {
+			sc.AddSolution(problem)
+		}
+		for _, r := range responses {
+			sc.HandleResponse(r.solutionId, r.test, r.verdict)
+		}
+		invocations := sc.ScheduleInvocations()
+		sc.NextTick()
+		m.Unlock()
+
+		for _, r := range invocations {
 			fmt.Fprintln(out, r.solutionId, r.test)
 		}
 		fmt.Fprintln(out, -1, -1)
@@ -89,7 +111,6 @@ type Scheduler struct {
 	problems         []*Problem
 	solutions        []*Solution
 	schedules        []Schedule
-	schedulesMutex   *sync.Mutex
 	currentTime      int
 	invocationTime   map[Invocation]int
 }
@@ -123,7 +144,6 @@ func NewScheduler(invokerCount int) *Scheduler {
 		invokerCount:     invokerCount,
 		freeInvokerCount: invokerCount,
 		schedules:        make([]Schedule, GA_POPULATION),
-		schedulesMutex:   new(sync.Mutex),
 		invocationTime:   make(map[Invocation]int),
 	}
 }
@@ -148,11 +168,9 @@ func (sc *Scheduler) AddSolution(problemId int) {
 		startTime: sc.currentTime,
 	}
 	sc.solutions = append(sc.solutions, s)
-	sc.schedulesMutex.Lock()
 	for i := range sc.schedules {
 		sc.schedules[i] = append(sc.schedules[i], s)
 	}
-	sc.schedulesMutex.Unlock()
 }
 
 func (sc *Scheduler) HandleResponse(solutionId, test int, verdict string) {
@@ -231,7 +249,6 @@ func (sc *Scheduler) UpdateSchedules() {
 	if len(sc.schedules[0]) == 0 {
 		return
 	}
-	sc.schedulesMutex.Lock()
 	newSchedules := make([]Schedule, 0)
 	for _, schedule := range sc.schedules {
 		newSchedules = append(newSchedules, clean(schedule))
@@ -253,7 +270,6 @@ func (sc *Scheduler) UpdateSchedules() {
 	}
 	sort.Sort(scheduleSorter{sc.schedules, scores})
 	sc.schedules = sc.schedules[:GA_POPULATION]
-	sc.schedulesMutex.Unlock()
 }
 
 func clean(schedule Schedule) Schedule {

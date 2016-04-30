@@ -12,11 +12,10 @@ import (
 )
 
 const (
-	SEED                 = 24536
-	GA_POPULATION        = 30
-	GA_MATING_POPULATION = 5
-	GA_MATING_CHILDREN   = 3
-	GA_MUTATION_SWAPS    = 5
+	SEED              = 24536
+	GA_POPULATION     = 15
+	GA_MUTATIONS      = 5
+	GA_MUTATION_SWAPS = 2
 )
 
 const TIME_STEP = 10
@@ -264,14 +263,10 @@ func (sc *Scheduler) UpdateSchedules() {
 func (sc *Scheduler) generateNewSchedules() []Schedule {
 	newSchedules := make([]Schedule, 0)
 	for _, schedule := range sc.schedules {
-		newSchedules = append(newSchedules, clean(schedule))
-	}
-	for i := 0; i < GA_POPULATION && i < len(newSchedules); i++ {
-		newSchedules = append(newSchedules, mutate(newSchedules[i]))
-		for j := i + 1; j < GA_MATING_POPULATION && j < len(newSchedules); j++ {
-			for k := 0; k < GA_MATING_CHILDREN; k++ {
-				newSchedules = append(newSchedules, cross(newSchedules[i], newSchedules[j]))
-			}
+		schedule = clean(schedule)
+		newSchedules = append(newSchedules, schedule)
+		for mutation := 0; mutation < GA_MUTATIONS; mutation++ {
+			newSchedules = append(newSchedules, mutate(schedule))
 		}
 	}
 	return newSchedules

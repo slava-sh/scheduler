@@ -18,7 +18,7 @@ const (
 	GA_POPULATION     = 15
 	GA_MUTATIONS      = 5
 	GA_MUTATION_SWAPS = 2
-	UPDATE_TIME       = 1 * time.Millisecond
+	UPDATE_DELAY      = 1 * time.Millisecond
 )
 
 const TIME_STEP = 10
@@ -44,7 +44,7 @@ func main() {
 			sc.UpdateSchedules()
 			m.Unlock()
 			updates++
-			time.Sleep(UPDATE_TIME)
+			time.Sleep(UPDATE_DELAY)
 		}
 	}()
 	ticks := 0

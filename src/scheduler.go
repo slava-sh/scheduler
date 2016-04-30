@@ -15,8 +15,8 @@ import (
 
 const (
 	SEED              = 24536
-	GA_POPULATION     = 3
-	GA_MUTATIONS      = 60
+	GA_POPULATION     = 10
+	GA_MUTATIONS      = 40
 	GA_MUTATION_SWAPS = 2
 	UPDATE_DELAY      = 1 * time.Millisecond
 )

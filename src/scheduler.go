@@ -128,7 +128,6 @@ type Solution struct {
 	isDone       bool
 	nextTest     int
 	testsRun     int
-	timeConsumed int
 	startTime    int
 	runningTests int
 }
@@ -173,11 +172,9 @@ func (sc *Scheduler) AddSolution(problemId int) {
 }
 
 func (sc *Scheduler) HandleResponse(solutionId, test int, verdict string) {
-	time := sc.currentTime - sc.invocationTime[Invocation{solutionId, test}]
 	s := sc.solutions[solutionId]
 	s.runningTests--
 	s.testsRun++
-	s.timeConsumed += time
 	if verdict != "OK" {
 		s.isDone = true
 	}
@@ -326,26 +323,6 @@ func mutate(schedule Schedule) Schedule {
 	return result
 }
 
-func cross(a, b Schedule) Schedule {
-	result := make(Schedule, 0)
-	used := make(map[*Solution]bool)
-	for len(a) != 0 && len(b) != 0 {
-		var s *Solution
-		if len(a) != 0 && rand.Intn(2) == 0 {
-			s = a[0]
-			a = a[1:]
-		} else {
-			s = b[0]
-			b = b[1:]
-		}
-		if !used[s] {
-			used[s] = true
-			result = append(result, s)
-		}
-	}
-	return result
-}
-
 type scheduleSorter struct {
 	schedules []Schedule
 	scores    []float64
@@ -362,10 +339,6 @@ func (s scheduleSorter) Swap(i, j int) {
 
 func (s scheduleSorter) Less(i, j int) bool {
 	return s.scores[i] < s.scores[j]
-}
-
-func (s *Solution) String() string {
-	return fmt.Sprint(s.id)
 }
 
 type FastReader struct {

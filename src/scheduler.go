@@ -16,7 +16,8 @@ import (
 const (
 	SEED                 = 24536
 	GA_POPULATION        = 30
-	GA_MATING_POPULATION = 10
+	GA_MATING_POPULATION = 5
+	GA_MATING_CHILDREN   = 3
 	GA_MUTATION_SWAPS    = 5
 	UPDATE_TIME          = 1 * time.Millisecond
 )
@@ -239,8 +240,9 @@ func (sc *Scheduler) UpdateSchedules() {
 		for i := 0; i < GA_POPULATION; i++ {
 			newSchedules = append(newSchedules, mutate(newSchedules[i]))
 			for j := i + 1; j < GA_MATING_POPULATION; j++ {
-				child := cross(newSchedules[i], newSchedules[j])
-				newSchedules = append(newSchedules, child)
+				for k := 0; k < GA_MATING_CHILDREN; k++ {
+					newSchedules = append(newSchedules, cross(newSchedules[i], newSchedules[j]))
+				}
 			}
 		}
 	}

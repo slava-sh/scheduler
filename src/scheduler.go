@@ -186,25 +186,39 @@ func (sc *Scheduler) HandleResponse(solutionId, test int, verdict string) {
 }
 
 func (sc *Scheduler) ScheduleInvocations() []Invocation {
+	if sc.freeInvokerCount == 0 {
+		return nil
+	}
 	invocations := make([]Invocation, 0)
+	pending := make([]*Solution, 0)
 	for _, s := range sc.schedule() {
-		if sc.freeInvokerCount == 0 {
-			break
+		if s.isDone {
+			continue
 		}
-		if s.isDone || s.runningTests != 0 {
+		pending = append(pending, s)
+		if s.runningTests != 0 {
 			continue
 		}
 		invocations = append(invocations, sc.nextInvocation(s))
 		sc.freeInvokerCount--
-	}
-	for _, s := range sc.schedule() {
 		if sc.freeInvokerCount == 0 {
 			break
 		}
-		for !s.isDone && sc.freeInvokerCount != 0 {
+	}
+	for sc.freeInvokerCount != 0 && len(pending) != 0 {
+		nextPending := make([]*Solution, 0)
+		for _, s := range pending {
+			if s.isDone {
+				continue
+			}
+			nextPending = append(nextPending, s)
 			invocations = append(invocations, sc.nextInvocation(s))
 			sc.freeInvokerCount--
+			if sc.freeInvokerCount == 0 {
+				break
+			}
 		}
+		pending = nextPending
 	}
 	return invocations
 }

@@ -9,7 +9,6 @@ import (
 	"os"
 	"sort"
 	"strings"
-	"sync"
 )
 
 const (
@@ -26,29 +25,32 @@ func main() {
 	in := NewFastReader(os.Stdin)
 	out := bufio.NewWriter(os.Stdout)
 	defer out.Flush()
-	invokerCount := in.NextInt()
-	problemCount := in.NextInt()
-	sc := NewScheduler(invokerCount)
-	for i := 0; i < problemCount; i++ {
-		timeLimit := in.NextInt()
-		testCount := in.NextInt()
-		sc.AddProblem(timeLimit, testCount)
-	}
-	updates := 0
-	m := new(sync.Mutex)
+
+	scheduler := make(chan *Scheduler, 1)
 	updateNeeded := make(chan bool, 1)
+
 	go func() {
 		for {
 			<-updateNeeded
-			m.Lock()
+			sc := <-scheduler
 			sc.UpdateSchedules()
-			m.Unlock()
-			updates++
+			scheduler <- sc
 		}
 	}()
-	ticks := 0
+
+	{
+		invokerCount := in.NextInt()
+		problemCount := in.NextInt()
+		sc := NewScheduler(invokerCount)
+		for i := 0; i < problemCount; i++ {
+			timeLimit := in.NextInt()
+			testCount := in.NextInt()
+			sc.AddProblem(timeLimit, testCount)
+		}
+		scheduler <- sc
+	}
+
 	for in.HasMore() {
-		ticks++
 		newSolutions := make([]int, 0)
 		for {
 			problem := in.NextInt()
@@ -57,6 +59,7 @@ func main() {
 			}
 			newSolutions = append(newSolutions, problem)
 		}
+
 		type Response struct {
 			solutionId int
 			test       int
@@ -73,22 +76,29 @@ func main() {
 			responses = append(responses, Response{solutionId, test, verdict})
 		}
 
-		m.Lock()
-		for _, problem := range newSolutions {
-			sc.AddSolution(problem)
+		{
+			sc := <-scheduler
+			for _, problem := range newSolutions {
+				sc.AddSolution(problem)
+			}
+			scheduler <- sc
 		}
-		m.Unlock()
+
 		select {
 		case updateNeeded <- true:
 		default:
 		}
-		m.Lock()
-		for _, r := range responses {
-			sc.HandleResponse(r.solutionId, r.test, r.verdict)
+
+		var invocations []Invocation
+		{
+			sc := <-scheduler
+			for _, r := range responses {
+				sc.HandleResponse(r.solutionId, r.test, r.verdict)
+			}
+			invocations = sc.ScheduleInvocations()
+			sc.NextTick()
+			scheduler <- sc
 		}
-		invocations := sc.ScheduleInvocations()
-		sc.NextTick()
-		m.Unlock()
 
 		for _, r := range invocations {
 			fmt.Fprintln(out, r.solutionId, r.test)
@@ -96,7 +106,6 @@ func main() {
 		fmt.Fprintln(out, -1, -1)
 		out.Flush()
 	}
-	fmt.Fprintln(os.Stderr, updates, "updates in", ticks, "ticks")
 }
 
 var debugFlag string

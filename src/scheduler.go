@@ -34,7 +34,7 @@ func main() {
 		testCount := in.NextInt()
 		sc.AddProblem(timeLimit, testCount)
 	}
-	updates := 0
+
 	m := new(sync.Mutex)
 	updateNeeded := make(chan bool, 1)
 	go func() {
@@ -43,12 +43,10 @@ func main() {
 			m.Lock()
 			sc.UpdateSchedules()
 			m.Unlock()
-			updates++
 		}
 	}()
-	ticks := 0
+
 	for in.HasMore() {
-		ticks++
 		newSolutions := make([]int, 0)
 		for {
 			problem := in.NextInt()
@@ -57,6 +55,7 @@ func main() {
 			}
 			newSolutions = append(newSolutions, problem)
 		}
+
 		type Response struct {
 			solutionId int
 			test       int
@@ -78,10 +77,12 @@ func main() {
 			sc.AddSolution(problem)
 		}
 		m.Unlock()
+
 		select {
 		case updateNeeded <- true:
 		default:
 		}
+
 		m.Lock()
 		for _, r := range responses {
 			sc.HandleResponse(r.solutionId, r.test, r.verdict)
@@ -96,7 +97,6 @@ func main() {
 		fmt.Fprintln(out, -1, -1)
 		out.Flush()
 	}
-	fmt.Fprintln(os.Stderr, updates, "updates in", ticks, "ticks")
 }
 
 var debugFlag string

@@ -26,6 +26,7 @@ func main() {
 	in := NewFastReader(os.Stdin)
 	out := bufio.NewWriter(os.Stdout)
 	defer out.Flush()
+
 	invokerCount := in.NextInt()
 	problemCount := in.NextInt()
 	sc := NewScheduler(invokerCount)
@@ -76,6 +77,9 @@ func main() {
 		for _, problem := range newSolutions {
 			sc.AddSolution(problem)
 		}
+		for _, r := range responses {
+			sc.HandleResponse(r.solutionId, r.test, r.verdict)
+		}
 		m.Unlock()
 
 		select {
@@ -84,9 +88,6 @@ func main() {
 		}
 
 		m.Lock()
-		for _, r := range responses {
-			sc.HandleResponse(r.solutionId, r.test, r.verdict)
-		}
 		invocations := sc.ScheduleInvocations()
 		sc.NextTick()
 		m.Unlock()

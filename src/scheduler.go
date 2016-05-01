@@ -10,7 +10,6 @@ import (
 	"sort"
 	"strings"
 	"sync"
-	"time"
 )
 
 const (
@@ -18,7 +17,6 @@ const (
 	GA_POPULATION     = 5
 	GA_MUTATIONS      = 60
 	GA_MUTATION_SWAPS = 2
-	UPDATE_DELAY      = 1 * time.Millisecond
 )
 
 const TIME_STEP = 10
@@ -38,13 +36,14 @@ func main() {
 	}
 	updates := 0
 	m := new(sync.Mutex)
+	updateNeeded := make(chan bool, 1)
 	go func() {
 		for {
+			<-updateNeeded
 			m.Lock()
 			sc.UpdateSchedules()
 			m.Unlock()
 			updates++
-			time.Sleep(UPDATE_DELAY)
 		}
 	}()
 	ticks := 0
@@ -78,6 +77,12 @@ func main() {
 		for _, problem := range newSolutions {
 			sc.AddSolution(problem)
 		}
+		m.Unlock()
+		select {
+		case updateNeeded <- true:
+		default:
+		}
+		m.Lock()
 		for _, r := range responses {
 			sc.HandleResponse(r.solutionId, r.test, r.verdict)
 		}

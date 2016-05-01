@@ -9,7 +9,6 @@ import (
 	"os"
 	"sort"
 	"strings"
-	"sync"
 	"time"
 )
 
@@ -30,19 +29,22 @@ func main() {
 	defer out.Flush()
 	invokerCount := in.NextInt()
 	problemCount := in.NextInt()
-	sc := NewScheduler(invokerCount)
-	for i := 0; i < problemCount; i++ {
-		timeLimit := in.NextInt()
-		testCount := in.NextInt()
-		sc.AddProblem(timeLimit, testCount)
+	scch := make(chan *Scheduler, 1)
+	{
+		sc := NewScheduler(invokerCount)
+		for i := 0; i < problemCount; i++ {
+			timeLimit := in.NextInt()
+			testCount := in.NextInt()
+			sc.AddProblem(timeLimit, testCount)
+		}
+		scch <- sc
 	}
 	updates := 0
-	m := new(sync.Mutex)
 	go func() {
 		for {
-			m.Lock()
+			sc := <-scch
 			sc.UpdateSchedules()
-			m.Unlock()
+			scch <- sc
 			updates++
 			time.Sleep(UPDATE_DELAY)
 		}
@@ -74,7 +76,7 @@ func main() {
 			responses = append(responses, Response{solutionId, test, verdict})
 		}
 
-		m.Lock()
+		sc := <-scch
 		for _, problem := range newSolutions {
 			sc.AddSolution(problem)
 		}
@@ -83,7 +85,7 @@ func main() {
 		}
 		invocations := sc.ScheduleInvocations()
 		sc.NextTick()
-		m.Unlock()
+		scch <- sc
 
 		for _, r := range invocations {
 			fmt.Fprintln(out, r.solutionId, r.test)

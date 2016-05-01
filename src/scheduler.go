@@ -158,7 +158,6 @@ func (sc *Scheduler) NextTick() {
 
 func (sc *Scheduler) AddProblem(timeLimit, testCount int) {
 	problemId := len(sc.problems)
-	debug("problem", problemId, "has", testCount, "tests and ML", timeLimit, "ms")
 	p := &Problem{problemId, timeLimit, testCount}
 	sc.problems = append(sc.problems, p)
 }
@@ -271,18 +270,6 @@ func (sc *Scheduler) UpdateSchedules() {
 		}
 		sc.schedules = append(sc.schedules, schedule)
 		prevHash = hash
-	}
-
-	if debugEnabled && len(sc.schedules) > 1 {
-		for i, schedule := range sc.schedules {
-			line := new(bytes.Buffer)
-			fmt.Fprintf(line, "%.0f %d %d:", scores[i], schedule.hash(), sc.currentTime)
-			for _, s := range schedule {
-				fmt.Fprintf(line, " (%d, %d, %.0f),", s.id, s.startTime, sc.estimateInvokerTime(s))
-			}
-			debug(line.String())
-		}
-		debug()
 	}
 }
 

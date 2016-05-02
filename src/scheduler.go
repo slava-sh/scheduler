@@ -116,6 +116,8 @@ type Scheduler struct {
 	problems         []*Problem
 	solutions        []*Solution
 	schedules        []Schedule
+	scheduleSize     int
+	solutionQueue    []*Solution
 	currentTime      int
 	invocationTime   map[Invocation]int
 }
@@ -148,6 +150,7 @@ func NewScheduler(invokerCount int) *Scheduler {
 		invokerCount:     invokerCount,
 		freeInvokerCount: invokerCount,
 		schedules:        make([]Schedule, GA_POPULATION),
+		scheduleSize:     3 * invokerCount,
 		invocationTime:   make(map[Invocation]int),
 	}
 }
@@ -171,8 +174,12 @@ func (sc *Scheduler) AddSolution(problemId int) {
 		startTime: sc.currentTime,
 	}
 	sc.solutions = append(sc.solutions, s)
-	for i := range sc.schedules {
-		sc.schedules[i] = append(sc.schedules[i], s)
+	if len(sc.schedule()) < sc.scheduleSize {
+		for i := range sc.schedules {
+			sc.schedules[i] = append(sc.schedules[i], s)
+		}
+	} else {
+		sc.solutionQueue = append(sc.solutionQueue, s)
 	}
 }
 
@@ -248,9 +255,16 @@ func (sc *Scheduler) estimateInvokerTime(s *Solution) float64 {
 }
 
 func (sc *Scheduler) UpdateSchedules() {
+	for len(sc.schedule()) != sc.scheduleSize && len(sc.solutionQueue) != 0 {
+		for i := range sc.schedules {
+			sc.schedules[i] = append(sc.schedules[i], sc.solutionQueue[0])
+		}
+		sc.solutionQueue = sc.solutionQueue[1:]
+	}
 	if len(sc.schedule()) == 0 {
 		return
 	}
+
 	newSchedules := sc.generateNewSchedules()
 	scores := make([]float64, 0)
 	for _, schedule := range newSchedules {

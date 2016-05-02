@@ -48,6 +48,11 @@ func main() {
 	}()
 
 	for in.HasMore() {
+		select {
+		case updateNeeded <- true:
+		default:
+		}
+
 		newSolutions := make([]int, 0)
 		for {
 			problem := in.NextInt()
@@ -80,14 +85,6 @@ func main() {
 		for _, r := range responses {
 			sc.HandleResponse(r.solutionId, r.test, r.verdict)
 		}
-		m.Unlock()
-
-		select {
-		case updateNeeded <- true:
-		default:
-		}
-
-		m.Lock()
 		invocations := sc.ScheduleInvocations()
 		sc.NextTick()
 		m.Unlock()

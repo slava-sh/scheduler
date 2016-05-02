@@ -37,7 +37,7 @@ func main() {
 	}
 
 	m := new(sync.Mutex)
-	updateNeeded := make(chan bool, 1)
+	updateNeeded := make(chan bool)
 	go func() {
 		for {
 			<-updateNeeded
